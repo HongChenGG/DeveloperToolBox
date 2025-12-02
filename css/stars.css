@@ -1,0 +1,124 @@
+/* 
+ * 纯 CSS 星空背景特效
+ * 可以在不引入外部资源的情况下实现
+ */
+.bg-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+    background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+    pointer-events: none;
+}
+
+.stars {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-45deg);
+}
+
+.star {
+    --star-color: rgba(255, 255, 255, .8);
+    --star-tail-length: 6em;
+    --star-tail-height: 2px;
+    --star-width: calc(var(--star-tail-length) / 6);
+    --fall-duration: 9s;
+    --tail-fade-duration: var(--fall-duration);
+    
+    position: absolute;
+    top: var(--top-offset);
+    left: 0;
+    width: var(--star-tail-length);
+    height: var(--star-tail-height);
+    color: var(--star-color);
+    background: linear-gradient(45deg, currentColor, transparent);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 6px currentColor);
+    transform: translate3d(104em, 0, 0);
+    animation: fall var(--fall-duration) var(--fall-delay) linear infinite, tail-fade var(--tail-fade-duration) var(--fall-delay) ease-out infinite;
+}
+
+@media screen and (max-width: 750px) {
+    .star {
+        animation: fall var(--fall-duration) var(--fall-delay) linear infinite;
+    }
+}
+
+.star:nth-child(1) { --fall-duration: 6s; --fall-delay: 0s; --top-offset: 0vh; }
+.star:nth-child(2) { --fall-duration: 11s; --fall-delay: 2s; --top-offset: 15vh; }
+.star:nth-child(3) { --fall-duration: 7s; --fall-delay: 4s; --top-offset: 25vh; }
+.star:nth-child(4) { --fall-duration: 9s; --fall-delay: 1s; --top-offset: 40vh; }
+.star:nth-child(5) { --fall-duration: 8s; --fall-delay: 6s; --top-offset: 55vh; }
+.star:nth-child(6) { --fall-duration: 12s; --fall-delay: 3s; --top-offset: 70vh; }
+.star:nth-child(7) { --fall-duration: 5s; --fall-delay: 7s; --top-offset: 90vh; }
+.star:nth-child(8) { --fall-duration: 10s; --fall-delay: 5s; --top-offset: 30vh; }
+.star:nth-child(9) { --fall-duration: 6s; --fall-delay: 8s; --top-offset: 60vh; }
+.star:nth-child(10) { --fall-duration: 8s; --fall-delay: 2.5s; --top-offset: 10vh; }
+
+.star::before, .star::after {
+    position: absolute;
+    content: '';
+    top: 0;
+    left: calc(var(--star-width) / -2);
+    width: var(--star-width);
+    height: 100%;
+    background: linear-gradient(45deg, transparent, currentColor, transparent);
+    border-radius: inherit;
+    animation: blink 2s linear infinite;
+}
+
+.star::before { transform: rotate(45deg); }
+.star::after { transform: rotate(-45deg); }
+
+@keyframes fall {
+    to { transform: translate3d(-30em, 0, 0); }
+}
+
+@keyframes tail-fade {
+    0%, 50% { width: var(--star-tail-length); opacity: 1; }
+    70%, 80% { width: 0; opacity: 0.4; }
+    100% { width: 0; opacity: 0; }
+}
+
+@keyframes blink {
+    50% { opacity: 0.6; }
+}
+
+/* 
+ * 静态星星背景 
+ * 使用 box-shadow 生成大量星星
+ */
+.static-stars {
+    width: 1px;
+    height: 1px;
+    background: transparent;
+    box-shadow: 1744px 122px #FFF , 134px 1321px #FFF , 92px 859px #FFF, 1800px 200px #FFF, 500px 800px #FFF, 1200px 500px #FFF; /* 示例，实际需要更多 */
+    animation: animStar 50s linear infinite;
+}
+
+.static-stars::after {
+    content: " ";
+    position: absolute;
+    top: 2000px;
+    width: 1px;
+    height: 1px;
+    background: transparent;
+    box-shadow: 1744px 122px #FFF , 134px 1321px #FFF , 92px 859px #FFF, 1800px 200px #FFF, 500px 800px #FFF, 1200px 500px #FFF;
+}
+
+/* 覆盖层，稍微加点渐变让文字更清晰 */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(30, 30, 46, 0.7); /* 保持原主题色调但半透明 */
+    z-index: -1;
+}

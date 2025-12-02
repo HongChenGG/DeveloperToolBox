@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>红尘百宝箱 - Developer Toolbox</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/stars.css">
+</head>
+<body>
+    <!-- 星空背景特效 -->
+    <div class="bg-animation">
+        <div class="static-stars"></div>
+        <div class="stars">
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+        </div>
+    </div>
+    <!-- 半透明遮罩，确保内容可读性 -->
+    <div class="overlay"></div>
+
+    <!-- SVG 图标定义 (隐藏) -->
+    <svg style="display: none;">
+        <defs>
+            <symbol id="icon-box" viewBox="0 0 24 24">
+                <path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 22V12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 12L3.28998 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 12L20.71 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-json" viewBox="0 0 24 24">
+                <path d="M14 2H6C5.46957 2 4.96086 2.21071 4.58579 2.58579C4.21071 2.96086 4 3.46957 4 4V20C4 20.5304 4.21071 21.0391 4.58579 21.4142C4.96086 21.7893 5.46957 22 6 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V8L14 2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14 2V8H20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 13H8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M16 17H8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M10 9H8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-time" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 6V12L16 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-magic" viewBox="0 0 24 24">
+                <path d="M8 12L12 16L20 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M6 12H4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18 6V4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M15 4.5L14 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18 11H20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 20L8 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-scissors" viewBox="0 0 24 24">
+                <circle cx="6" cy="6" r="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="6" cy="18" r="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="20" y1="4" x2="8.12" y2="15.88" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="14.47" y1="14.48" x2="20" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="8.12" y1="8.12" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-copy" viewBox="0 0 24 24">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M5 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V4C2 3.46957 2.21071 2.96086 2.58579 2.58579C2.96086 2.21071 3.46957 2 4 2H13C13.5304 2 14.0391 2.21071 14.4142 2.58579C14.7893 2.96086 15 3.46957 15 4V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-database" viewBox="0 0 24 24">
+                <ellipse cx="12" cy="5" rx="9" ry="3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M21 12C21 13.66 16.97 15 12 15C7.03 15 3 13.66 3 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 5V19C3 20.66 7.03 22 12 22C16.97 22 21 20.66 21 19V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-filter" viewBox="0 0 24 24">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-qrcode" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <path d="M14 14h7v7h-7z" fill="currentColor"/>
+            </symbol>
+            <symbol id="icon-barcode" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="3" y1="15" x2="21" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-grid" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" fill="none"/>
+            </symbol>
+            <symbol id="icon-transfer" viewBox="0 0 24 24">
+                <path d="M7 10l5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M17 14l-5 5-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </symbol>
+            <symbol id="icon-image" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" fill="none"/>
+            </symbol>
+        </defs>
+    </svg>
+
+    <div id="app">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="logo-area">
+                <svg><use xlink:href="#icon-box"></use></svg>
+                <span>红尘百宝箱</span>
+            </div>
+            <div class="nav-menu" id="nav-menu">
+                <div class="nav-item active" data-target="json">
+                    <svg><use xlink:href="#icon-json"></use></svg>
+                    <span>JSON 格式化</span>
+                </div>
+                <div class="nav-item" data-target="sql">
+                    <svg><use xlink:href="#icon-database"></use></svg>
+                    <span>SQL 拼接</span>
+                </div>
+                <div class="nav-item" data-target="sql-cleaner">
+                    <svg><use xlink:href="#icon-filter"></use></svg>
+                    <span>SQL 字段清洗</span>
+                </div>
+                <div class="nav-item" data-target="qrcode">
+                    <svg><use xlink:href="#icon-qrcode"></use></svg>
+                    <span>二维码/条形码</span>
+                </div>
+                <!-- <div class="nav-item" data-target="nff">
+                    <svg><use xlink:href="#icon-grid"></use></svg>
+                    <span>补票号码分解</span>
+                </div> -->
+                <div class="nav-item" data-target="codec">
+                    <svg><use xlink:href="#icon-transfer"></use></svg>
+                    <span>编码/加密转换</span>
+                </div>
+                <div class="nav-item" data-target="timestamp">
+                    <svg><use xlink:href="#icon-time"></use></svg>
+                    <span>时间戳转换</span>
+                </div>
+                <div class="nav-item" data-target="headers">
+                    <svg><use xlink:href="#icon-copy"></use></svg>
+                    <span>请求头工具</span>
+                </div>
+                <div class="nav-item" data-target="notes">
+                    <svg><use xlink:href="#icon-json"></use></svg>
+                    <span>会议纪要</span>
+                </div>
+                <div class="nav-item" data-target="weather">
+                    <svg><use xlink:href="#icon-time"></use></svg>
+                    <span>天气查询</span>
+                </div>
+            </div>
+            <!-- 主题设置按钮 -->
+            <div style="padding: 20px; border-top: 1px solid var(--border-color);">
+                <button id="btn-theme-settings" class="btn btn-primary" style="width: 100%; justify-content: center;">
+                    <svg style="width: 16px; height: 16px;"><use xlink:href="#icon-magic"></use></svg>
+                    <span>主题设置</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="main-content">
+            <!-- 顶部标题栏 -->
+            <div class="content-header">
+                <div class="content-title" id="page-title">JSON 格式化工具</div>
+            </div>
+
+            <!-- 工具工作区 -->
+            <div class="tool-workspace">
+                
+                <!-- JSON 工具面板 -->
+                <div class="tool-page active" id="page-json">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-format">
+                            <svg><use xlink:href="#icon-magic"></use></svg> 格式化
+                        </button>
+                        <button class="btn btn-warning" id="btn-minify">
+                            <svg><use xlink:href="#icon-scissors"></use></svg> 压缩
+                        </button>
+                        <button class="btn btn-success" id="btn-copy">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 复制结果
+                        </button>
+                        <button class="btn btn-info" id="btn-parse-fields">
+                            <svg><use xlink:href="#icon-filter"></use></svg> 识别字段
+                        </button>
+                        <button class="btn btn-danger" id="btn-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <!-- 字段填充表单区域 -->
+                    <div id="json-fields-form" style="display: none; background: var(--bg-panel); padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border-color); max-height: 400px; overflow-y: auto;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; position: sticky; top: 0; background: var(--bg-panel); z-index: 10; padding-bottom: 10px;">
+                            <div style="font-weight: bold; color: var(--accent-color); font-size: 14px;">对象字段填充</div>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-primary" id="btn-add-json-item" style="padding: 5px 15px; font-size: 13px;">
+                                    <svg style="width: 14px; height: 14px;"><use xlink:href="#icon-magic"></use></svg> 添加到结果
+                                </button>
+                                <button class="btn btn-danger" id="btn-close-fields-form" style="padding: 5px 15px; font-size: 13px;">关闭</button>
+                            </div>
+                        </div>
+                        <div id="json-fields-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; padding-right: 5px;"></div>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 输入区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>输入 JSON</span>
+                                <span id="input-stats">0 chars</span>
+                            </div>
+                            <textarea 
+                                class="code-textarea" 
+                                id="json-input"
+                                placeholder="请在此粘贴 JSON 字符串..."
+                                spellcheck="false"
+                            ></textarea>
+                        </div>
+
+                        <!-- 输出区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>结果展示</span>
+                                <span id="error-msg" style="color: var(--danger-color)"></span>
+                            </div>
+                            <!-- 结果展示区 -->
+                            <div class="code-viewer" id="json-output" style="display: none;"></div>
+                            <div class="code-viewer" id="json-placeholder" style="color: var(--text-secondary); display: flex; align-items: center; justify-content: center;">
+                                准备就绪，等待输入...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SQL 工具面板 -->
+                <div class="tool-page" id="page-sql">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-sql-convert">
+                            <svg><use xlink:href="#icon-play"></use></svg> 拼接并格式化
+                        </button>
+                        <button class="btn btn-success" id="btn-sql-copy">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 复制结果
+                        </button>
+                        <button class="btn btn-danger" id="btn-sql-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 输入区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>输入 MyBatis 日志 (含 Preparing 和 Parameters)</span>
+                            </div>
+                            <textarea 
+                                class="code-textarea" 
+                                id="sql-input"
+                                placeholder="请粘贴 MyBatis 日志，例如：&#10;==> Preparing: select * from table where id = ?&#10;==> Parameters: 123(Integer)"
+                                spellcheck="false"
+                            ></textarea>
+                        </div>
+
+                        <!-- 输出区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>SQL 结果</span>
+                            </div>
+                            <div class="code-viewer" id="sql-output" style="display: none;"></div>
+                            <div class="code-viewer" id="sql-placeholder" style="color: var(--text-secondary); display: flex; align-items: center; justify-content: center;">
+                                准备就绪，等待输入...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SQL 清洗工具面板 -->
+                <div class="tool-page" id="page-sql-cleaner">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-cleaner-parse">
+                            <svg><use xlink:href="#icon-filter"></use></svg> 1. 识别列名
+                        </button>
+                        <button class="btn btn-warning" id="btn-cleaner-generate">
+                            <svg><use xlink:href="#icon-play"></use></svg> 2. 生成新 SQL
+                        </button>
+                        <button class="btn btn-success" id="btn-cleaner-copy">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 复制结果
+                        </button>
+                        <button class="btn btn-danger" id="btn-cleaner-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <!-- 列选择区域 -->
+                    <div id="column-selector" style="display: none; background: var(--bg-panel); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid var(--border-color);">
+                        
+                        <!-- 表名替换区域 -->
+                        <div style="margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color);">
+                            <div style="margin-bottom: 10px; font-weight: bold; color: var(--accent-color); display: flex; align-items: center;">
+                                <input type="checkbox" id="enable-rename-table" style="margin-right: 8px;">
+                                <label for="enable-rename-table" style="cursor: pointer;">启用替换表名</label>
+                            </div>
+                            <div id="rename-table-area" style="display: none; margin-left: 24px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span style="color: var(--text-secondary);">原表名: <span id="current-table-name" style="color: var(--text-primary); font-family: monospace;"></span></span>
+                                    <span style="color: var(--text-secondary);">-></span>
+                                    <input type="text" id="new-table-name" placeholder="输入新表名" style="
+                                        background: var(--bg-dark); 
+                                        border: 1px solid var(--border-color); 
+                                        color: var(--text-primary); 
+                                        padding: 5px 10px; 
+                                        border-radius: 4px;
+                                        outline: none;
+                                    ">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 10px; font-weight: bold; color: var(--accent-color);">请勾选需要【删除】的字段：</div>
+                        <div id="column-list" style="display: flex; flex-wrap: wrap; gap: 10px; max-height: 300px; overflow-y: auto; padding-right: 5px;"></div>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 输入区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>输入 INSERT SQL 语句 (支持多条)</span>
+                            </div>
+                            <textarea 
+                                class="code-textarea" 
+                                id="cleaner-input"
+                                placeholder="请粘贴 INSERT INTO 语句..."
+                                spellcheck="false"
+                            ></textarea>
+                        </div>
+
+                        <!-- 输出区 -->
+                        <div class="editor-panel">
+                            <div class="panel-header">
+                                <span>处理结果</span>
+                            </div>
+                            <div class="code-viewer" id="cleaner-output" style="display: none;"></div>
+                            <div class="code-viewer" id="cleaner-placeholder" style="color: var(--text-secondary); display: flex; align-items: center; justify-content: center;">
+                                等待生成...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 二维码/条形码工具面板 -->
+                <div class="tool-page" id="page-qrcode">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-qr-generate">
+                            <svg><use xlink:href="#icon-qrcode"></use></svg> 生成
+                        </button>
+                        <button class="btn btn-success" id="btn-qr-download">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 下载图片
+                        </button>
+                        <label class="btn btn-warning" style="margin: 0; cursor: pointer;">
+                            <svg><use xlink:href="#icon-image"></use></svg> 上传解析二维码
+                            <input type="file" id="qr-decode-input" accept="image/*" style="display: none;">
+                        </label>
+                        <button class="btn btn-danger" id="btn-qr-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 左侧：配置与输入 -->
+                        <div class="editor-panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <span>内容与设置</span>
+                            </div>
+                            <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px; height: 100%; box-sizing: border-box;">
+                                <textarea 
+                                    class="code-textarea" 
+                                    id="qr-input" 
+                                    placeholder="请输入要生成的内容..." 
+                                    style="flex: 1; border: 1px solid var(--border-color); border-radius: 4px;"
+                                ></textarea>
+                                
+                                <!-- 二维码解析结果显示区 -->
+                                <div id="qr-decode-result" style="display: none; padding: 10px; background: var(--bg-darker); border: 1px solid var(--border-color); border-radius: 4px;">
+                                    <div style="margin-bottom: 5px; color: var(--accent-color); font-weight: bold; font-size: 13px;">解析结果：</div>
+                                    <div id="qr-decode-text" style="color: var(--text-primary); word-break: break-all; line-height: 1.6;"></div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                    <div>
+                                        <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">类型</div>
+                                        <select id="qr-type" style="width: 100%; padding: 8px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                            <option value="qrcode">二维码 (QR Code)</option>
+                                            <option value="barcode">条形码 (Barcode)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">尺寸/宽度</div>
+                                        <input type="number" id="qr-size" value="200" style="width: 100%; padding: 8px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">前景色</div>
+                                        <input type="color" id="qr-color-dark" value="#000000" style="width: 100%; height: 35px; padding: 0; border: none; background: transparent; cursor: pointer;">
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">背景色</div>
+                                        <input type="color" id="qr-color-light" value="#ffffff" style="width: 100%; height: 35px; padding: 0; border: none; background: transparent; cursor: pointer;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右侧：预览 -->
+                        <div class="editor-panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <span>预览</span>
+                            </div>
+                            <div id="qr-preview-area" style="flex: 1; display: flex; align-items: center; justify-content: center; background: var(--bg-darker); overflow: auto; padding: 20px;">
+                                <div id="qr-placeholder" style="color: var(--text-secondary);">等待生成...</div>
+                                <div id="qrcode-container" style="display: none;"></div>
+                                <img id="barcode-img" style="display: none; max-width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 补票号码分解工具面板 -->
+                <div class="tool-page" id="page-nff">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-nff-generate" disabled>
+                            <svg><use xlink:href="#icon-magic"></use></svg> 生成 NFF 文件
+                        </button>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 左侧：配置与输入 -->
+                        <div class="editor-panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <span>文件与设置</span>
+                            </div>
+                            <div style="padding: 20px; display: flex; flex-direction: column; gap: 20px;">
+                                <!-- 文件上传 -->
+                                <div style="display: flex; align-items: center; gap: 15px;">
+                                    <label for="nff-file-input" class="btn btn-primary" style="margin:0; cursor: pointer; display: inline-flex; align-items: center;">
+                                        <svg style="margin-right: 5px;"><use xlink:href="#icon-copy"></use></svg> 选择文件
+                                        <input type="file" id="nff-file-input" accept=".txt,.nff" style="display: none;">
+                                    </label>
+                                    <span id="nff-file-name" style="color: var(--text-secondary); font-style: italic;">未选择文件</span>
+                                </div>
+
+                                <div style="border-top: 1px solid var(--border-color); margin: 10px 0;"></div>
+
+                                <!-- 参数设置 -->
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px;">
+                                    <div>
+                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">行数 (Rows)</div>
+                                        <input type="number" id="nff-rows" value="7" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">列数 (Cols)</div>
+                                        <input type="number" id="nff-cols" value="5" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">模板套数</div>
+                                        <input type="number" id="nff-template-num" value="1" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                    </div>
+                                </div>
+
+                                <!-- 消息提示 -->
+                                <div id="nff-message" style="margin-top: 20px; padding: 15px; border-radius: 4px; display: none; text-align: center; font-weight: bold;"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 说明区域 -->
+                        <div class="editor-panel" style="flex: 0 0 300px;">
+                            <div class="panel-header">
+                                <span>使用说明</span>
+                            </div>
+                            <div style="padding: 20px; color: var(--text-secondary); line-height: 1.6;">
+                                <p>1. 点击“选择文件”上传包含号码的文本文件 (.txt 或 .nff)。</p>
+                                <p>2. 系统会自动识别文件内容并排序。</p>
+                                <p>3. 设置生成的矩阵行数和列数。</p>
+                                <p>4. 设置“模板套数”，用于控制循环位移。</p>
+                                <p>5. 点击“生成 NFF 文件”即可下载处理后的文件。</p>
+                                <p style="margin-top: 10px; color: var(--accent-color);">注意：生成成功后，模板套数会自动 +1，方便连续操作。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 编码/加密转换工具面板 -->
+                <div class="tool-page" id="page-codec" style="flex-direction: column; height: 100%;">
+                    <!-- Tab 导航 -->
+                    <div class="toolbar" style="padding: 0 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-panel); margin-bottom: 0; flex: none;">
+                        <div class="tab-nav" id="codec-tabs" style="display: flex; gap: 20px; align-items: center; height: 50px;">
+                            <div class="tab-item active" data-tab="img-base64" style="padding: 0 5px; height: 100%; display: flex; align-items: center; cursor: pointer; border-bottom: 2px solid var(--accent-color); color: var(--text-primary); font-weight: bold; box-sizing: border-box;">图片/Base64</div>
+                            <div class="tab-item" data-tab="url-codec" style="padding: 0 5px; height: 100%; display: flex; align-items: center; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); box-sizing: border-box;">URL 编码</div>
+                            <div class="tab-item" data-tab="base64-text" style="padding: 0 5px; height: 100%; display: flex; align-items: center; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); box-sizing: border-box;">Base64 文本</div>
+                            <div class="tab-item" data-tab="utf8-hex" style="padding: 0 5px; height: 100%; display: flex; align-items: center; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-secondary); box-sizing: border-box;">UTF-8 Hex</div>
+                        </div>
+                    </div>
+
+                    <div class="editor-area" style="padding: 20px; flex: 1; overflow: hidden; display: flex;">
+                        
+                        <!-- 1. 图片 <-> Base64 -->
+                        <div class="codec-tab-content active" id="tab-img-base64" style="height: 100%; display: flex; flex-direction: column; flex: 1;">
+                            <div class="editor-panel" style="flex: 1; display: flex; flex-direction: column; margin: 0; width: 100%;">
+                                <div class="panel-header">
+                                    <span><svg style="margin-right:5px; width:16px; height:16px;"><use xlink:href="#icon-image"></use></svg> 图片与 Base64 互转</span>
+                                </div>
+                                <div style="padding: 20px; flex: 1; display: flex; gap: 20px; min-height: 0; height: 100%; box-sizing: border-box;">
+                                    <!-- 左侧：输入区 -->
+                                    <div style="flex: 1; display: flex; flex-direction: column; gap: 15px; min-width: 0;">
+                                        <div style="display: flex; gap: 10px; align-items: center;">
+                                            <label class="btn btn-primary" style="margin:0; cursor: pointer; flex: 1; text-align: center; height: 40px; line-height: 40px; padding: 0; font-size: 15px; box-sizing: border-box; display: inline-block;">
+                                                <span style="display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+                                                    <svg style="margin-right: 5px;"><use xlink:href="#icon-image"></use></svg> 上传图片
+                                                </span>
+                                                <input type="file" id="codec-img-input" accept="image/*" style="display: none;">
+                                            </label>
+                                            <button class="btn btn-success" id="btn-codec-base64-to-img" style="flex: 1; height: 40px; font-size: 15px; box-sizing: border-box; padding: 0;">转换预览</button>
+                                            <button class="btn btn-danger" id="btn-codec-img-clear" style="width: 100px; height: 40px; font-size: 15px; box-sizing: border-box; padding: 0;">清空</button>
+                                        </div>
+                                        
+                                        <div style="flex: 1; display: flex; flex-direction: column;">
+                                            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px; font-weight: bold;">Base64 字符串区:</div>
+                                            <textarea 
+                                                id="codec-img-base64" 
+                                                class="code-textarea" 
+                                                placeholder="此处显示生成的 Base64，或者在此粘贴 Base64 字符串以还原图片..." 
+                                                style="flex: 1; resize: none; font-size: 13px; line-height: 1.6;"
+                                            ></textarea>
+                                        </div>
+                                    </div>
+
+                                    <!-- 右侧：预览区 -->
+                                    <div style="flex: 1; background: var(--bg-darker); border: 2px dashed var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; min-width: 0;">
+                                        <div id="codec-img-placeholder" style="color: var(--text-secondary); text-align: center;">
+                                            <svg style="width: 64px; height: 64px; margin-bottom: 15px; opacity: 0.3;"><use xlink:href="#icon-image"></use></svg>
+                                            <div style="font-size: 14px; opacity: 0.7;">图片预览区域</div>
+                                        </div>
+                                        <img id="codec-img-preview" style="max-width: 100%; max-height: 100%; display: none; object-fit: contain;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. URL 编码转换 -->
+                        <div class="codec-tab-content" id="tab-url-codec" style="display: none; height: 100%; flex-direction: column; flex: 1;">
+                            <div class="editor-panel" style="height: 100%; display: flex; flex-direction: column; margin: 0; width: 100%;">
+                                <div class="panel-header">
+                                    <span><svg style="margin-right:5px; width:16px; height:16px;"><use xlink:href="#icon-transfer"></use></svg> URL 编码 / 解码</span>
+                                </div>
+                                <div style="padding: 30px; flex: 1; display: flex; flex-direction: column; gap: 25px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">输入内容 (Input)</div>
+                                        <textarea id="codec-url-input" class="code-textarea" style="flex: 1; resize: none; font-size: 14px;" placeholder="请输入需要编码或解码的 URL 字符串..."></textarea>
+                                    </div>
+                                    
+                                    <div style="display: flex; gap: 20px; justify-content: center;">
+                                        <button class="btn btn-primary" id="btn-codec-url-encode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">
+                                            Encode (编码) <svg style="margin-left: 5px; transform: rotate(90deg);"><use xlink:href="#icon-transfer"></use></svg>
+                                        </button>
+                                        <button class="btn btn-warning" id="btn-codec-url-decode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">
+                                            Decode (解码) <svg style="margin-left: 5px; transform: rotate(90deg);"><use xlink:href="#icon-transfer"></use></svg>
+                                        </button>
+                                    </div>
+
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">转换结果 (Output)</div>
+                                        <textarea id="codec-url-output" class="code-textarea" style="flex: 1; background: var(--bg-darker); resize: none; font-size: 14px;" readonly placeholder="等待转换..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Base64 文本转换 -->
+                        <div class="codec-tab-content" id="tab-base64-text" style="display: none; height: 100%; flex-direction: column; flex: 1;">
+                            <div class="editor-panel" style="height: 100%; display: flex; flex-direction: column; margin: 0; width: 100%;">
+                                <div class="panel-header">
+                                    <span><svg style="margin-right:5px; width:16px; height:16px;"><use xlink:href="#icon-lock"></use></svg> Base64 文本加密 / 解密 (UTF-8 支持中文)</span>
+                                </div>
+                                <div style="padding: 30px; flex: 1; display: flex; flex-direction: column; gap: 25px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">输入内容 (Input)</div>
+                                        <textarea id="codec-base64-text-input" class="code-textarea" style="flex: 1; resize: none; font-size: 14px;" placeholder="请输入普通文本或 Base64 字符串..."></textarea>
+                                    </div>
+                                    
+                                    <div style="display: flex; gap: 20px; justify-content: center;">
+                                        <button class="btn btn-primary" id="btn-codec-base64-encode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">Encode (加密)</button>
+                                        <button class="btn btn-warning" id="btn-codec-base64-decode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">Decode (解密)</button>
+                                    </div>
+
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">转换结果 (Output)</div>
+                                        <textarea id="codec-base64-text-output" class="code-textarea" style="flex: 1; background: var(--bg-darker); resize: none; font-size: 14px;" readonly placeholder="等待转换..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                         <!-- 4. UTF-8 Hex 转换 -->
+                         <div class="codec-tab-content" id="tab-utf8-hex" style="display: none; height: 100%; flex-direction: column; flex: 1;">
+                            <div class="editor-panel" style="height: 100%; display: flex; flex-direction: column; margin: 0; width: 100%;">
+                                <div class="panel-header">
+                                    <span><svg style="margin-right:5px; width:16px; height:16px;"><use xlink:href="#icon-code"></use></svg> UTF-8 Hex 转换</span>
+                                </div>
+                                <div style="padding: 30px; flex: 1; display: flex; flex-direction: column; gap: 25px;">
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">输入内容 (Input)</div>
+                                        <textarea id="codec-utf8-input" class="code-textarea" style="flex: 1; resize: none; font-size: 14px;" placeholder="请输入文本 或 Hex 字符串 (如 E4 BD A0)..."></textarea>
+                                    </div>
+                                    
+                                    <div style="display: flex; gap: 20px; justify-content: center;">
+                                        <button class="btn btn-primary" id="btn-codec-utf8-encode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">Text -> Hex</button>
+                                        <button class="btn btn-warning" id="btn-codec-utf8-decode" style="min-width: 150px; height: 40px; font-size: 15px; box-sizing: border-box;">Hex -> Text</button>
+                                    </div>
+
+                                    <div style="flex: 1; display: flex; flex-direction: column;">
+                                        <div style="margin-bottom: 10px; font-weight: bold; font-size: 14px;">转换结果 (Output)</div>
+                                        <textarea id="codec-utf8-output" class="code-textarea" style="flex: 1; background: var(--bg-darker); resize: none; font-size: 14px;" readonly placeholder="等待转换..."></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- 时间戳转换工具面板 -->
+                <div class="tool-page" id="page-timestamp">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-ts-to-time">
+                            <svg><use xlink:href="#icon-time"></use></svg> 时间戳转时间
+                        </button>
+                        <button class="btn btn-warning" id="btn-time-to-ts">
+                            <svg><use xlink:href="#icon-time"></use></svg> 时间转时间戳
+                        </button>
+                        <button class="btn btn-success" id="btn-ts-now">
+                            <svg><use xlink:href="#icon-magic"></use></svg> 当前时间戳
+                        </button>
+                        <button class="btn btn-danger" id="btn-ts-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <div class="editor-area">
+                        <!-- 左侧：时间戳转换 -->
+                        <div class="editor-panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <span>时间戳输入</span>
+                            </div>
+                            <div style="padding: 20px; display: flex; flex-direction: column; gap: 20px; height: 100%; box-sizing: border-box;">
+                                <div>
+                                    <div style="margin-bottom: 10px; color: var(--text-secondary); font-size: 13px;">输入时间戳（10位或13位）</div>
+                                    <input 
+                                        type="text" 
+                                        id="ts-input" 
+                                        placeholder="例如：1701504000 或 1701504000000"
+                                        style="width: 100%; padding: 12px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 14px; font-family: monospace;"
+                                    >
+                                </div>
+
+                                <div style="border-top: 1px solid var(--border-color); padding-top: 20px;">
+                                    <div style="margin-bottom: 10px; color: var(--text-secondary); font-size: 13px;">输入时间（转为时间戳）</div>
+                                    <input 
+                                        type="datetime-local" 
+                                        id="time-input"
+                                        style="width: 100%; padding: 12px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 14px;"
+                                    >
+                                </div>
+
+                                <div style="background: var(--bg-darker); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                    <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">当前时间（北京时间）</div>
+                                    <div id="current-time" style="color: var(--accent-color); font-size: 16px; font-weight: bold; font-family: monospace;">--</div>
+                                    <div style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">当前时间戳：<span id="current-timestamp" style="color: var(--text-primary); font-family: monospace;">--</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右侧：转换结果 -->
+                        <div class="editor-panel" style="flex: 1;">
+                            <div class="panel-header">
+                                <span>转换结果</span>
+                            </div>
+                            <div style="padding: 20px; display: flex; flex-direction: column; gap: 15px; height: 100%; box-sizing: border-box;">
+                                <div id="ts-result-container" style="display: none;">
+                                    <div style="background: var(--bg-darker); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+                                        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">北京时间（UTC+8）</div>
+                                        <div id="ts-result-beijing" style="color: var(--text-primary); font-size: 18px; font-weight: bold; font-family: monospace; margin-bottom: 10px;">--</div>
+                                        <div style="color: var(--text-secondary); font-size: 12px;">格式化：<span id="ts-result-formatted" style="color: var(--text-primary);">--</span></div>
+                                    </div>
+
+                                    <div style="background: var(--bg-darker); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">详细信息</div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                                            <div>
+                                                <span style="color: var(--text-secondary);">年份：</span>
+                                                <span id="ts-year" style="color: var(--text-primary); font-family: monospace;">--</span>
+                                            </div>
+                                            <div>
+                                                <span style="color: var(--text-secondary);">月份：</span>
+                                                <span id="ts-month" style="color: var(--text-primary); font-family: monospace;">--</span>
+                                            </div>
+                                            <div>
+                                                <span style="color: var(--text-secondary);">日期：</span>
+                                                <span id="ts-day" style="color: var(--text-primary); font-family: monospace;">--</span>
+                                            </div>
+                                            <div>
+                                                <span style="color: var(--text-secondary);">星期：</span>
+                                                <span id="ts-weekday" style="color: var(--text-primary);">--</span>
+                                            </div>
+                                            <div>
+                                                <span style="color: var(--text-secondary);">时间：</span>
+                                                <span id="ts-time" style="color: var(--text-primary); font-family: monospace;">--</span>
+                                            </div>
+                                            <div>
+                                                <span style="color: var(--text-secondary);">时间戳类型：</span>
+                                                <span id="ts-type" style="color: var(--text-primary);">--</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="time-result-container" style="display: none;">
+                                    <div style="background: var(--bg-darker); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">时间戳结果</div>
+                                        <div style="margin-bottom: 15px;">
+                                            <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 5px;">10位时间戳（秒）</div>
+                                            <div id="time-result-10" style="color: var(--text-primary); font-size: 18px; font-weight: bold; font-family: monospace;">--</div>
+                                        </div>
+                                        <div>
+                                            <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 5px;">13位时间戳（毫秒）</div>
+                                            <div id="time-result-13" style="color: var(--text-primary); font-size: 18px; font-weight: bold; font-family: monospace;">--</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div id="ts-placeholder" style="color: var(--text-secondary); display: flex; align-items: center; justify-content: center; flex: 1;">
+                                    输入时间戳或时间后点击转换按钮...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 请求头工具面板 -->
+                <div class="tool-page" id="page-headers">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-header-custom">
+                            <svg><use xlink:href="#icon-magic"></use></svg> 生成自定义请求头
+                        </button>
+                        <button class="btn btn-danger" id="btn-header-clear">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空
+                        </button>
+                    </div>
+
+                    <div class="editor-area" style="display: flex; flex-direction: column; gap: 20px; padding: 20px;">
+                        <!-- 常用请求头模板区域 -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px;">
+                            
+                            <!-- JSON 格式 -->
+                            <div class="header-card" data-header-type="json">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-json"></use></svg>
+                                    JSON 格式
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Content-Type: application/json</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Form 表单 -->
+                            <div class="header-card" data-header-type="form">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    Form 表单
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Content-Type: application/x-www-form-urlencoded</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Multipart -->
+                            <div class="header-card" data-header-type="multipart">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-image"></use></svg>
+                                    Multipart (文件上传)
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Content-Type: multipart/form-data</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- JWT Authorization -->
+                            <div class="header-card" data-header-type="jwt">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    JWT 认证
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Authorization: Bearer YOUR_JWT_TOKEN</code>
+                                    <input type="text" id="jwt-token-input" placeholder="输入JWT Token" style="width: 100%; margin-top: 8px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Basic Auth -->
+                            <div class="header-card" data-header-type="basic">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    Basic 认证
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Authorization: Basic BASE64_CREDENTIALS</code>
+                                    <input type="text" id="basic-username" placeholder="用户名" style="width: 100%; margin-top: 8px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                    <input type="password" id="basic-password" placeholder="密码" style="width: 100%; margin-top: 5px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- API Key -->
+                            <div class="header-card" data-header-type="apikey">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    API Key
+                                </div>
+                                <div class="header-card-content">
+                                    <code>X-API-Key: YOUR_API_KEY</code>
+                                    <input type="text" id="api-key-input" placeholder="输入API Key" style="width: 100%; margin-top: 8px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- CORS -->
+                            <div class="header-card" data-header-type="cors">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-transfer"></use></svg>
+                                    CORS 跨域
+                                </div>
+                                <div class="header-card-content">
+                                    <code style="font-size: 11px;">Access-Control-Allow-Origin: *<br>Access-Control-Allow-Methods: GET, POST, PUT, DELETE<br>Access-Control-Allow-Headers: Content-Type</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- User-Agent -->
+                            <div class="header-card" data-header-type="useragent">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    User-Agent (Chrome)
+                                </div>
+                                <div class="header-card-content">
+                                    <code style="font-size: 10px;">User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Accept JSON -->
+                            <div class="header-card" data-header-type="accept">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-json"></use></svg>
+                                    Accept JSON
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Accept: application/json</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Cache Control -->
+                            <div class="header-card" data-header-type="cache">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-time"></use></svg>
+                                    缓存控制
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Cache-Control: no-cache, no-store, must-revalidate</code>
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Referer -->
+                            <div class="header-card" data-header-type="referer">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    Referer
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Referer: https://example.com</code>
+                                    <input type="text" id="referer-input" placeholder="输入Referer URL" style="width: 100%; margin-top: 8px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                            <!-- Cookie -->
+                            <div class="header-card" data-header-type="cookie">
+                                <div class="header-card-title">
+                                    <svg style="width: 18px; height: 18px; margin-right: 8px;"><use xlink:href="#icon-copy"></use></svg>
+                                    Cookie
+                                </div>
+                                <div class="header-card-content">
+                                    <code>Cookie: session_id=abc123; user_token=xyz789</code>
+                                    <input type="text" id="cookie-input" placeholder="输入Cookie" style="width: 100%; margin-top: 8px; padding: 6px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <button class="btn btn-success btn-copy-header" style="width: 100%; margin-top: 10px;">
+                                    <svg><use xlink:href="#icon-copy"></use></svg> 复制
+                                </button>
+                            </div>
+
+                        </div>
+
+                        <!-- 自定义请求头区域 -->
+                        <div style="background: var(--bg-panel); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <div style="font-weight: bold; color: var(--accent-color); font-size: 14px; margin-bottom: 15px;">自定义请求头</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                <div>
+                                    <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">请求头名称</div>
+                                    <input type="text" id="custom-header-name" placeholder="例如：X-Custom-Header" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                </div>
+                                <div>
+                                    <div style="margin-bottom: 5px; color: var(--text-secondary); font-size: 12px;">请求头值</div>
+                                    <input type="text" id="custom-header-value" placeholder="例如：custom-value" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                </div>
+                            </div>
+                            <div style="background: var(--bg-darker); padding: 15px; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+                                <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 5px;">预览：</div>
+                                <code id="custom-header-preview" style="color: var(--text-primary); font-size: 14px;">请输入请求头名称和值</code>
+                            </div>
+                            <button class="btn btn-primary" id="btn-copy-custom-header" style="width: 100%;">
+                                <svg><use xlink:href="#icon-copy"></use></svg> 复制自定义请求头
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 会议纪要工具面板 -->
+                <div class="tool-page" id="page-notes">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-new-meeting">
+                            <svg><use xlink:href="#icon-magic"></use></svg> 新建会议
+                        </button>
+                        <button class="btn btn-success" id="btn-note-export">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 导出纪要
+                        </button>
+                        <button class="btn btn-warning" id="btn-note-clear-all">
+                            <svg><use xlink:href="#icon-delete"></use></svg> 清空所有
+                        </button>
+                    </div>
+
+                    <div class="editor-area" style="display: flex; gap: 0; padding: 0; height: 100%;">
+                        <!-- 左侧：会议主题列表 -->
+                        <div style="width: 300px; border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: var(--bg-panel);">
+                            <div style="padding: 15px; border-bottom: 1px solid var(--border-color); background: var(--bg-darker);">
+                                <div style="font-weight: bold; color: var(--accent-color); font-size: 14px; margin-bottom: 10px;">会议主题</div>
+                                <input 
+                                    type="text" 
+                                    id="meeting-search" 
+                                    placeholder="搜索会议..."
+                                    style="width: 100%; padding: 8px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 13px;"
+                                >
+                            </div>
+                            <div id="meetings-list" style="flex: 1; overflow-y: auto; padding: 10px;">
+                                <div style="color: var(--text-secondary); text-align: center; padding: 40px 20px;">
+                                    暂无会议，请点击“新建会议”
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右侧：详情区域 -->
+                        <div style="flex: 1; display: flex; flex-direction: column;">
+                            <!-- 默认提示 -->
+                            <div id="notes-empty-state" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);">
+                                <div style="text-align: center;">
+                                    <svg style="width: 64px; height: 64px; opacity: 0.3; margin-bottom: 20px;"><use xlink:href="#icon-json"></use></svg>
+                                    <div style="font-size: 16px;">请在左侧选择或新建会议</div>
+                                </div>
+                            </div>
+
+                            <!-- 会议详情 -->
+                            <div id="notes-detail" style="display: none; flex: 1; flex-direction: column;">
+                                <!-- 会议头部 -->
+                                <div style="padding: 20px; border-bottom: 1px solid var(--border-color); background: var(--bg-panel);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                        <div>
+                                            <h2 id="current-meeting-title" style="margin: 0; color: var(--accent-color); font-size: 20px;"></h2>
+                                            <div id="current-meeting-info" style="color: var(--text-secondary); font-size: 12px; margin-top: 5px;"></div>
+                                        </div>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="btn btn-primary" id="btn-add-record" style="padding: 8px 15px;">
+                                                <svg style="width: 14px; height: 14px;"><use xlink:href="#icon-magic"></use></svg> 添加记录
+                                            </button>
+                                            <button class="btn btn-danger" id="btn-delete-meeting" style="padding: 8px 15px;">删除会议</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 记录列表 -->
+                                <div style="flex: 1; overflow-y: auto; padding: 20px;">
+                                    <div id="current-notes-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 新建/编辑记录弹窗 -->
+                    <div id="note-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+                        <div style="background: var(--bg-panel); border-radius: 12px; width: 90%; max-width: 600px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--border-color);">
+                            <div style="padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                                <h3 id="modal-title" style="margin: 0; color: var(--accent-color);"></h3>
+                                <button id="btn-close-modal" style="background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
+                            </div>
+                            <div style="padding: 20px; overflow-y: auto; flex: 1;">
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <div id="modal-meeting-input" style="display: none;">
+                                        <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">会议主题 *</div>
+                                        <input 
+                                            type="text" 
+                                            id="modal-meeting-title" 
+                                            placeholder="例如：项目启动会议"
+                                            style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 14px;"
+                                        >
+                                    </div>
+                                    <div>
+                                        <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">记录内容 *</div>
+                                        <textarea 
+                                            id="modal-note-content" 
+                                            placeholder="输入记录内容..."
+                                            style="width: 100%; height: 150px; padding: 12px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none; font-size: 14px; resize: vertical; line-height: 1.6;"
+                                        ></textarea>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                        <div>
+                                            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">类型</div>
+                                            <select id="modal-note-type" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
+                                                <option value="议题">议题</option>
+                                                <option value="决议">决议</option>
+                                                <option value="待办">待办事项</option>
+                                                <option value="问题">问题</option>
+                                                <option value="备注">备注</option>
+                                                <option value="其他">其他</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">负责人（可选）</div>
+                                            <input 
+                                                type="text" 
+                                                id="modal-note-person" 
+                                                placeholder="负责人姓名"
+                                                style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;"
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="padding: 20px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; justify-content: flex-end;">
+                                <button class="btn btn-secondary" id="btn-modal-cancel" style="padding: 10px 20px;">取消</button>
+                                <button class="btn btn-primary" id="btn-modal-save" style="padding: 10px 20px;">保存</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 天气查询工具面板 -->
+                <div class="tool-page" id="page-weather">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="btn-get-location">
+                            <svg><use xlink:href="#icon-magic"></use></svg> 自动定位
+                        </button>
+                        <button class="btn btn-success" id="btn-refresh-weather">
+                            <svg><use xlink:href="#icon-copy"></use></svg> 刷新天气
+                        </button>
+                    </div>
+
+                    <div style="padding: 20px;">
+                        <!-- 城市选择 -->
+                        <div style="margin-bottom: 20px;">
+                            <div style="display: flex; gap: 10px;">
+                                <select 
+                                    id="city-select" 
+                                    style="flex: 1; padding: 12px; background: var(--bg-panel); color: var(--text-primary); border: 2px solid var(--border-color); border-radius: 8px; outline: none; font-size: 14px; cursor: pointer;"
+                                >
+                                    <option value="">请选择城市...</option>
+                                    <optgroup label="直辖市">
+                                        <option value="北京">北京</option>
+                                        <option value="上海">上海</option>
+                                        <option value="天津">天津</option>
+                                        <option value="重庆">重庆</option>
+                                    </optgroup>
+                                    <optgroup label="省会城市">
+                                        <option value="广州">广州</option>
+                                        <option value="深圳">深圳</option>
+                                        <option value="成都">成都</option>
+                                        <option value="杭州">杭州</option>
+                                        <option value="武汉">武汉</option>
+                                        <option value="西安">西安</option>
+                                        <option value="郑州">郑州</option>
+                                        <option value="南京">南京</option>
+                                        <option value="济南">济南</option>
+                                        <option value="沈阳">沈阳</option>
+                                        <option value="长春">长春</option>
+                                        <option value="哈尔滨">哈尔滨</option>
+                                        <option value="石家庄">石家庄</option>
+                                        <option value="太原">太原</option>
+                                        <option value="合肥">合肥</option>
+                                        <option value="福州">福州</option>
+                                        <option value="南昌">南昌</option>
+                                        <option value="长沙">长沙</option>
+                                        <option value="昆明">昆明</option>
+                                        <option value="贵阳">贵阳</option>
+                                        <option value="兰州">兰州</option>
+                                        <option value="西宁">西宁</option>
+                                        <option value="银川">银川</option>
+                                        <option value="乌鲁木齐">乌鲁木齐</option>
+                                        <option value="拉萨">拉萨</option>
+                                        <option value="海口">海口</option>
+                                    </optgroup>
+                                    <optgroup label="热门城市">
+                                        <option value="苏州">苏州</option>
+                                        <option value="大连">大连</option>
+                                        <option value="青岛">青岛</option>
+                                        <option value="宁波">宁波</option>
+                                        <option value="厦门">厦门</option>
+                                        <option value="东莞">东莞</option>
+                                        <option value="佛山">佛山</option>
+                                        <option value="珠海">珠海</option>
+                                        <option value="无锡">无锡</option>
+                                        <option value="南通">南通</option>
+                                        <option value="温州">温州</option>
+                                        <option value="烟台">烟台</option>
+                                        <option value="唐山">唐山</option>
+                                        <option value="保定">保定</option>
+                                    </optgroup>
+                                </select>
+                                <button class="btn btn-primary" id="btn-search-city">
+                                    <svg><use xlink:href="#icon-magic"></use></svg> 查询
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 天气信息卡片 -->
+                        <div id="weather-info" style="display: none;">
+                            <!-- 当前天气 -->
+                            <div style="background: linear-gradient(135deg, var(--bg-panel) 0%, var(--bg-darker) 100%); border-radius: 16px; padding: 30px; margin-bottom: 20px; border: 2px solid var(--border-color); box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                    <div>
+                                        <h2 id="weather-city" style="margin: 0 0 5px 0; color: var(--accent-color); font-size: 28px;"></h2>
+                                        <div id="weather-update-time" style="color: var(--text-secondary); font-size: 13px;"></div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div id="weather-temp" style="font-size: 48px; font-weight: bold; color: var(--accent-color);"></div>
+                                    </div>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                                    <div class="weather-detail-item">
+                                        <div class="weather-detail-label">天气状况</div>
+                                        <div id="weather-condition" class="weather-detail-value"></div>
+                                    </div>
+                                    <div class="weather-detail-item">
+                                        <div class="weather-detail-label">体感温度</div>
+                                        <div id="weather-feels-like" class="weather-detail-value"></div>
+                                    </div>
+                                    <div class="weather-detail-item">
+                                        <div class="weather-detail-label">湿度</div>
+                                        <div id="weather-humidity" class="weather-detail-value"></div>
+                                    </div>
+                                    <div class="weather-detail-item">
+                                        <div class="weather-detail-label">风速</div>
+                                        <div id="weather-wind" class="weather-detail-value"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 24小时预报 -->
+                            <div style="background: var(--bg-panel); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 2px solid var(--border-color);">
+                                <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">24小时预报</h3>
+                                <div id="hourly-forecast" style="display: flex; gap: 15px; overflow-x: auto; padding: 10px 0;"></div>
+                            </div>
+
+                            <!-- 7天预报 -->
+                            <div style="background: var(--bg-panel); border-radius: 16px; padding: 20px; border: 2px solid var(--border-color);">
+                                <h3 style="margin: 0 0 15px 0; color: var(--text-primary);">7天预报</h3>
+                                <div id="daily-forecast" style="display: flex; flex-direction: column; gap: 10px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- 加载提示 -->
+                        <div id="weather-loading" style="display: none; text-align: center; padding: 60px; color: var(--text-secondary);">
+                            <div style="font-size: 18px; margin-bottom: 10px;">加载中...</div>
+                        </div>
+
+                        <!-- 默认提示 -->
+                        <div id="weather-placeholder" style="text-align: center; padding: 60px; color: var(--text-secondary);">
+                            <svg style="width: 64px; height: 64px; opacity: 0.3; margin-bottom: 20px;"><use xlink:href="#icon-time"></use></svg>
+                            <div style="font-size: 16px;">请输入城市名称查询天气，或点击“自动定位”</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- 主题设置弹窗 -->
+    <div id="theme-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: center; justify-content: center;">
+        <div style="background: var(--bg-panel); border-radius: 16px; width: 90%; max-width: 600px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; border: 2px solid var(--border-color); box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div style="padding: 25px; border-bottom: 2px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--bg-darker);">
+                <h3 style="margin: 0; color: var(--accent-color); font-size: 20px;">🎨 主题设置</h3>
+                <button id="btn-close-theme-modal" style="background: none; border: none; color: var(--text-secondary); font-size: 28px; cursor: pointer; padding: 0; width: 35px; height: 35px; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 30px; overflow-y: auto; flex: 1;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px;">
+                    <!-- 青蓝主题 -->
+                    <div class="theme-card" data-theme="blue">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #E6F3FF 0%, #F0F8FF 100%); border: 3px solid #00B4D8;">
+                            <div style="background: #00B4D8; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: white; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #B8E6F5; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">🌊 清新青蓝</div>
+                        <div class="theme-desc">清爽明亮，适合长时间使用</div>
+                    </div>
+
+                    <!-- 粉色主题 -->
+                    <div class="theme-card" data-theme="pink">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #FFF5F7 0%, #FFE8ED 100%); border: 3px solid #FF6B9D;">
+                            <div style="background: #FF6B9D; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: white; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #FFD1DC; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">🌸 甜美粉色</div>
+                        <div class="theme-desc">温柔甜美，充满活力</div>
+                    </div>
+
+                    <!-- 紫色主题 -->
+                    <div class="theme-card" data-theme="purple">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%); border: 3px solid #A78BFA;">
+                            <div style="background: #A78BFA; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: white; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #DDD6FE; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">💜 神秘紫色</div>
+                        <div class="theme-desc">高贵神秘，独特个性</div>
+                    </div>
+
+                    <!-- 橙色主题 -->
+                    <div class="theme-card" data-theme="orange">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%); border: 3px solid #FB923C;">
+                            <div style="background: #FB923C; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: white; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #FED7AA; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">🍊 阳光橙色</div>
+                        <div class="theme-desc">热情活力，积极向上</div>
+                    </div>
+
+                    <!-- 绿色主题 -->
+                    <div class="theme-card" data-theme="green">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%); border: 3px solid #10B981;">
+                            <div style="background: #10B981; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: white; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #BBF7D0; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">🌿 清新绿色</div>
+                        <div class="theme-desc">自然清新，舒缓眼睛</div>
+                    </div>
+
+                    <!-- 深色主题 -->
+                    <div class="theme-card" data-theme="dark">
+                        <div class="theme-preview" style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); border: 3px solid #64748B;">
+                            <div style="background: #475569; height: 30px; border-radius: 8px 8px 0 0;"></div>
+                            <div style="padding: 15px;">
+                                <div style="background: #334155; height: 8px; border-radius: 4px; margin-bottom: 8px;"></div>
+                                <div style="background: #475569; height: 8px; border-radius: 4px; width: 70%;"></div>
+                            </div>
+                        </div>
+                        <div class="theme-name">🌙 深色模式</div>
+                        <div class="theme-desc">低调沉稳，保护视力</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 音乐播放器 -->
+    <div id="music-player" style="position: fixed; bottom: 20px; right: 20px; width: 360px; background: var(--bg-panel); border: 2px solid var(--border-color); border-radius: 16px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 1500; display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div style="font-weight: bold; color: var(--accent-color); font-size: 16px;">🎵 随机音乐</div>
+            <button id="btn-close-player" style="background: none; border: none; color: var(--text-secondary); font-size: 20px; cursor: pointer; padding: 0; width: 25px; height: 25px;">&times;</button>
+        </div>
+        
+        <!-- 黑胶唱片 + 专辑封面 -->
+        <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+            <div class="vinyl-container">
+                <div class="vinyl-record" id="vinyl-record">
+                    <div class="vinyl-center">
+                        <!-- 专辑封面 -->
+                        <img id="album-cover" src="" alt="专辑封面" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: none;">
+                        <div class="vinyl-hole"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <div id="song-name" style="font-size: 14px; font-weight: bold; color: var(--text-primary); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">加载中...</div>
+            <div id="artist-name" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;">请稍候</div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 5px;">
+                <span id="current-time">0:00</span>
+                <span id="total-time">0:00</span>
+            </div>
+            <div style="width: 100%; height: 6px; background: var(--bg-darker); border-radius: 3px; cursor: pointer; overflow: hidden;" id="progress-bar">
+                <div id="progress-fill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 0.1s;"></div>
+            </div>
+        </div>
+        
+        <div style="display: flex; justify-content: center; gap: 15px;">
+            <button id="btn-prev" class="player-btn" style="width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--bg-darker); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.3s;">⏮️</button>
+            <button id="btn-play" class="player-btn" style="width: 50px; height: 50px; border-radius: 50%; border: none; background: var(--accent-color); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; transition: all 0.3s;">▶️</button>
+            <button id="btn-next" class="player-btn" style="width: 45px; height: 45px; border-radius: 50%; border: none; background: var(--bg-darker); color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.3s;">⏭️</button>
+        </div>
+        
+        <audio id="audio-player" style="display: none;"></audio>
+    </div>
+    
+    <!-- 音乐播放器开关按钮 -->
+    <button id="btn-toggle-player" style="position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-color) 100%); color: white; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.2); font-size: 24px; z-index: 1400; transition: all 0.3s;">🎵</button>
+
+    <!-- 引入 JS 库 -->
+    <script src="lib/qrcode.min.js"></script>
+    <script src="lib/JsBarcode.all.min.js"></script>
+    <script src="lib/jsQR.js"></script>
+    <!-- 应用逻辑 -->
+    <script src="js/app.js"></script>
+    <script src="js/notes.js"></script>
+    <script src="js/theme.js"></script>
+    <script src="js/weather.js"></script>
+    <script src="js/music.js"></script>
+</body>
+</html>
