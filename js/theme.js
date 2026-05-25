@@ -1,9 +1,19 @@
 // 主题切换功能
 (function() {
     'use strict';
-    
+
     const THEME_STORAGE_KEY = 'selected_theme';
-    
+
+    // 把 #RRGGBB 转 rgba 字符串（用于动态阴影色）
+    function hexToRgba(hex, alpha) {
+        if (!hex || typeof hex !== 'string') return `rgba(0, 180, 216, ${alpha})`;
+        const h = hex.replace('#', '');
+        const n = h.length === 3
+            ? h.split('').map(c => parseInt(c + c, 16))
+            : [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+        return `rgba(${n[0]}, ${n[1]}, ${n[2]}, ${alpha})`;
+    }
+
     // 主题配置
     const themes = {
         blue: {
@@ -91,6 +101,22 @@
             'logo-bg': 'linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%)',
             'btn-primary': 'linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%)',
             'btn-primary-hover': 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)'
+        },
+        midnight: {
+            name: '极光午夜',
+            '--bg-dark': '#0B1120',
+            '--bg-darker': '#020617',
+            '--bg-panel': '#0F172A',
+            '--accent-color': '#7DD3FC',
+            '--border-color': '#1E293B',
+            '--hover-bg': 'rgba(125, 211, 252, 0.12)',
+            '--text-primary': '#F0F9FF',
+            '--text-secondary': '#94A3B8',
+            'body-bg': 'radial-gradient(ellipse at top, #1E1B4B 0%, #0B1120 40%, #020617 100%)',
+            'sidebar-bg': 'linear-gradient(180deg, #0F172A 0%, #020617 100%)',
+            'logo-bg': 'linear-gradient(135deg, #7DD3FC 0%, #C084FC 50%, #F0ABFC 100%)',
+            'btn-primary': 'linear-gradient(135deg, #7DD3FC 0%, #C084FC 100%)',
+            'btn-primary-hover': 'linear-gradient(135deg, #38BDF8 0%, #A855F7 100%)'
         }
     };
 
@@ -133,6 +159,27 @@
             .btn-primary:hover {
                 background: ${theme['btn-primary-hover']} !important;
             }
+            /* 主题设置按钮（侧栏底部）：强调阴影，复用主题渐变 */
+            #btn-theme-settings {
+                background: ${theme['btn-primary']} !important;
+                box-shadow: 0 4px 14px ${hexToRgba(theme['--accent-color'], 0.35)} !important;
+                transition: all 0.25s ease;
+            }
+            #btn-theme-settings:hover {
+                background: ${theme['btn-primary-hover']} !important;
+                box-shadow: 0 6px 20px ${hexToRgba(theme['--accent-color'], 0.55)} !important;
+                transform: translateY(-2px);
+            }
+            /* 音乐播放浮动按钮：圆形 + 主题渐变 + 悬浮放大 */
+            #btn-toggle-player {
+                background: ${theme['btn-primary']} !important;
+                box-shadow: 0 6px 20px ${hexToRgba(theme['--accent-color'], 0.45)} !important;
+            }
+            #btn-toggle-player:hover {
+                background: ${theme['btn-primary-hover']} !important;
+                box-shadow: 0 10px 28px ${hexToRgba(theme['--accent-color'], 0.65)} !important;
+                transform: scale(1.08) rotate(8deg);
+            }
             .meeting-item-info span:first-child {
                 background: ${theme['btn-primary']} !important;
             }
@@ -145,7 +192,7 @@
                 border-color: var(--border-color) !important;
             }
             .weather-detail-item {
-                background: ${themeName === 'dark' ? 'rgba(51, 65, 85, 0.5)' : 'rgba(255, 255, 255, 0.5)'} !important;
+                background: ${(themeName === 'dark' || themeName === 'midnight') ? 'rgba(51, 65, 85, 0.5)' : 'rgba(255, 255, 255, 0.5)'} !important;
             }
             .hourly-item, .daily-item {
                 background: var(--bg-darker) !important;
@@ -162,6 +209,12 @@
 
         // 保存到localStorage
         localStorage.setItem(THEME_STORAGE_KEY, themeName);
+
+        // 在 body 上标记主题（供 CSS 暗色适配）
+        document.body.setAttribute('data-theme', themeName);
+
+        // 通知 3D 背景更新颜色
+        window.dispatchEvent(new CustomEvent('theme-changed', { detail: { theme: themeName } }));
 
         // 更新选中状态
         document.querySelectorAll('.theme-card').forEach(card => {
