@@ -36,7 +36,9 @@
             const item = document.querySelector(`.nav-item[data-target="${tgt}"]`);
             if (item) item.style.display = online ? '' : 'none';
         });
-        // 音乐悬浮播放器
+        // 音乐悬浮按钮 + 播放面板：都受网络控制
+        const toggleBtn = document.getElementById('btn-toggle-player');
+        if (toggleBtn) toggleBtn.style.display = online ? '' : 'none';
         const player = document.getElementById('music-player');
         if (player && !online) player.style.display = 'none';
 

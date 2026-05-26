@@ -42,6 +42,9 @@
         vplayground:{ icon: 'icon-play',      title: '组件 Playground',  desc: 'Vue + Element UI 离线运行 / 实时预览' },
         vuedocs:    { icon: 'icon-md',        title: 'Vue 速查文档',      desc: 'Vue 2 / Vue 3 模板语法 + 指令 + 生命周期 + API' },
         euidocs:    { icon: 'icon-class',     title: 'ElementUI 文档',    desc: '组件用法、属性、事件、插槽与示例（Element UI 2.x）' },
+
+        // AI 助手
+        aichat:     { icon: 'icon-ai',        title: 'AI 对话助手',       desc: '本地 Ollama / 中转站 OpenAI 兼容接口 · 流式输出 · 导出 HTML' },
     };
 
     function applyMeta(targetId) {

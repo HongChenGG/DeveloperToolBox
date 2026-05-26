@@ -196,6 +196,19 @@
             <symbol id="icon-plus" viewBox="0 0 24 24">
                 <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
             </symbol>
+            <symbol id="icon-ai" viewBox="0 0 24 24">
+                <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" fill="currentColor"/>
+                <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z" fill="currentColor" opacity=".7"/>
+            </symbol>
+            <symbol id="icon-settings" viewBox="0 0 24 24">
+                <path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.94 3l-1.78-.45a7.4 7.4 0 00-.57-1.39l.95-1.58-1.41-1.41-1.58.95a7.4 7.4 0 00-1.39-.57L14.5 4.06h-2L12.05 6a7.4 7.4 0 00-1.39.57l-1.58-.95-1.41 1.41.95 1.58a7.4 7.4 0 00-.57 1.39L6.06 10.5v2l1.94.45c.13.49.32.95.57 1.39l-.95 1.58 1.41 1.41 1.58-.95c.44.25.9.44 1.39.57l.45 1.94h2l.45-1.94a7.4 7.4 0 001.39-.57l1.58.95 1.41-1.41-.95-1.58c.25-.44.44-.9.57-1.39l1.94-.45v-2z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+            </symbol>
+            <symbol id="icon-send" viewBox="0 0 24 24">
+                <path d="M3 20l18-8L3 4l4 8-4 8z" fill="currentColor"/>
+            </symbol>
+            <symbol id="icon-stop" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
+            </symbol>
         </defs>
     </svg>
 
@@ -207,6 +220,15 @@
                 <span>红尘百宝箱</span>
             </div>
             <div class="nav-menu" id="nav-menu">
+                <!-- 分组标题：AI 助手 -->
+                <div style="padding: 8px 20px; font-size: 11px; color: var(--text-secondary); opacity:.65; letter-spacing:1px;">AI 助手</div>
+                <div class="nav-item" data-target="aichat">
+                    <svg><use xlink:href="#icon-ai"></use></svg>
+                    <span>AI 对话</span>
+                </div>
+
+                <!-- 分组标题：常用工具 -->
+                <div style="padding: 8px 20px; font-size: 11px; color: var(--text-secondary); opacity:.65; letter-spacing:1px;">常用工具</div>
                 <div class="nav-item active" data-target="json">
                     <svg><use xlink:href="#icon-json"></use></svg>
                     <span>JSON 格式化</span>
@@ -246,6 +268,10 @@
                 <div class="nav-item" data-target="weather">
                     <svg><use xlink:href="#icon-time"></use></svg>
                     <span>天气查询</span>
+                </div>
+                <div class="nav-item" data-target="reminder">
+                    <svg><use xlink:href="#icon-time"></use></svg>
+                    <span>备忘录提醒</span>
                 </div>
 
                 <!-- 分组标题：开发增强 -->
@@ -2203,6 +2229,240 @@
                     </div>
                 </div>
 
+                <!-- 备忘录提醒 -->
+                <div class="tool-page" id="page-reminder">
+                    <div class="toolbar" style="flex-wrap:wrap;gap:8px;align-items:flex-end">
+                        <div style="display:flex;flex-direction:column;gap:4px">
+                            <label style="font-size:11px;color:var(--text-secondary)">提醒时间</label>
+                            <input type="datetime-local" id="rem-at" class="rem-input" style="min-width:200px">
+                        </div>
+                        <div style="flex:1;min-width:240px;display:flex;flex-direction:column;gap:4px">
+                            <label style="font-size:11px;color:var(--text-secondary)">提醒内容</label>
+                            <input type="text" id="rem-content" class="rem-input" placeholder="比如：18:30 跟客户开会">
+                        </div>
+                        <button class="btn btn-primary" id="rem-add" style="height:36px">
+                            <svg><use xlink:href="#icon-plus"></use></svg> 添加提醒
+                        </button>
+                        <button class="btn btn-warning" id="rem-clear-done" style="height:36px" title="清掉所有已确认的过期提醒">清理已完成</button>
+                    </div>
+                    <div style="padding:14px 18px;display:flex;gap:18px;align-items:center;border-bottom:1px solid var(--border-color);font-size:12px;color:var(--text-secondary)">
+                        <span>共 <b id="rem-stat-total" style="color:var(--text-primary)">0</b> 条</span>
+                        <span>· 待提醒 <b id="rem-stat-pending" style="color:#f59e0b">0</b></span>
+                        <span>· 已确认 <b id="rem-stat-done" style="color:#10b981">0</b></span>
+                        <span style="margin-left:auto;opacity:.7">提示：到点未确认每次打开页面都会提醒</span>
+                    </div>
+                    <div id="rem-list" style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px"></div>
+                </div>
+
+                <!-- AI 对话 -->
+                <div class="tool-page" id="page-aichat">
+                    <div class="toolbar">
+                        <button class="btn btn-primary" id="ai-btn-new"><svg><use xlink:href="#icon-plus"></use></svg> 新建会话</button>
+                        <button class="btn btn-info" id="ai-btn-settings"><svg><use xlink:href="#icon-settings"></use></svg> 设置</button>
+                        <button class="btn btn-success" id="ai-btn-export"><svg><use xlink:href="#icon-export"></use></svg> 导出 HTML</button>
+                        <button class="btn btn-warning" id="ai-btn-clear-msgs"><svg><use xlink:href="#icon-delete"></use></svg> 清空当前对话</button>
+                        <span id="ai-conn-status" style="margin-left:auto;color:var(--text-secondary);font-size:12px">未配置</span>
+                    </div>
+                    <div class="ai-layout" style="display:grid;grid-template-columns:240px 1fr;gap:10px;padding:10px;height:calc(100% - 80px);box-sizing:border-box;overflow:hidden">
+                        <!-- 会话列表 -->
+                        <div id="ai-sessions" style="background:var(--bg-darker);border-radius:8px;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+                        <!-- 聊天主区 -->
+                        <div style="display:flex;flex-direction:column;background:var(--bg-darker);border-radius:8px;overflow:hidden;min-height:0">
+                            <!-- 多模型选择条（Cursor 风格胶囊） -->
+                            <div class="ai-profile-bar" id="ai-profile-bar"></div>
+                            <div id="ai-messages" style="flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;min-height:0"></div>
+                            <div style="border-top:1px solid var(--border-color);padding:12px;background:var(--bg-panel)">
+                                <div style="display:flex;gap:8px;align-items:flex-end">
+                                    <textarea id="ai-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行..." style="flex:1;min-height:48px;max-height:200px;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary);font-size:14px;resize:vertical;font-family:inherit"></textarea>
+                                    <button id="ai-btn-send" class="btn btn-primary" style="height:48px;min-width:80px">
+                                        <svg><use xlink:href="#icon-send"></use></svg> 发送
+                                    </button>
+                                    <button id="ai-btn-stop" class="btn btn-danger" style="height:48px;min-width:80px;display:none">
+                                        <svg><use xlink:href="#icon-stop"></use></svg> 停止
+                                    </button>
+                                </div>
+                                <div style="margin-top:6px;font-size:11px;color:var(--text-secondary);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+                                    <span id="ai-model-tip">模型：未配置</span>
+                                    <span style="display:flex;align-items:center;gap:6px">
+                                        <span class="ai-skill-badge" id="ai-skill-badge" style="display:none"></span>
+                                        <span id="ai-token-tip"></span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 设置弹窗 -->
+    <div id="ai-settings-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:2000;align-items:center;justify-content:center">
+        <div style="background:var(--bg-panel);border-radius:16px;width:90%;max-width:680px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;border:2px solid var(--border-color);box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+            <div style="padding:20px 25px;border-bottom:2px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;background:var(--bg-darker)">
+                <h3 style="margin:0;color:var(--accent-color);font-size:18px">⚙️ AI 助手设置</h3>
+                <button id="ai-btn-close-settings" style="background:none;border:none;color:var(--text-secondary);font-size:26px;cursor:pointer;padding:0;width:32px;height:32px;line-height:1">&times;</button>
+            </div>
+            <div style="padding:20px 25px;overflow-y:auto;flex:1;font-size:13.5px">
+                <!-- 多模型管理 -->
+                <div style="margin-bottom:18px;padding:12px;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-darker)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <label class="ai-label" style="margin:0">📚 多模型配置（点条目切换正在编辑的模型）</label>
+                        <button type="button" class="btn btn-primary" id="ai-cfg-profile-add" style="padding:4px 10px;font-size:12px;height:28px">+ 新建模型</button>
+                    </div>
+                    <div class="ai-profile-edit-list" id="ai-profile-edit-list"></div>
+                    <div style="margin-top:8px">
+                        <label class="ai-label" style="font-size:11.5px">模型显示名</label>
+                        <input type="text" id="ai-cfg-profile-name" class="ai-input" placeholder="给这个模型起个名字（如：本地 Ollama / 中转 GPT-4o）">
+                    </div>
+                </div>
+
+                <!-- 预设模板 -->
+                <div style="margin-bottom:16px">
+                    <label class="ai-label">快速预设（应用于当前模型）</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button class="btn btn-info ai-preset" data-preset="ollama">Ollama 本地</button>
+                        <button class="btn btn-info ai-preset" data-preset="deepseek">DeepSeek 中转</button>
+                        <button class="btn btn-info ai-preset" data-preset="oneapi">OneAPI / NewAPI</button>
+                        <button class="btn btn-info ai-preset" data-preset="custom">自定义</button>
+                    </div>
+                    <div style="margin-top:6px;font-size:11px;color:var(--text-secondary)">点击预设自动填充地址，再根据需要调整</div>
+                </div>
+
+                <div style="margin-bottom:14px">
+                    <label class="ai-label">API Base URL <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="ai-cfg-baseurl" class="ai-input" placeholder="如 http://localhost:11434/v1 或 https://api.deepseek.com/v1">
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">⚠️ Ollama 需设置环境变量 OLLAMA_ORIGINS=* 才能从浏览器访问</div>
+                </div>
+
+                <div style="margin-bottom:14px">
+                    <label class="ai-label">API Key（可选，Ollama 留空即可）</label>
+                    <input type="password" id="ai-cfg-apikey" class="ai-input" placeholder="sk-xxxxxx，不需要的话留空">
+                </div>
+
+                <div style="margin-bottom:14px">
+                    <label class="ai-label">模型 ID</label>
+                    <div style="display:flex;gap:8px">
+                        <input type="text" id="ai-cfg-model" class="ai-input" style="flex:1" placeholder="如 deepseek-chat / qwen2.5:7b">
+                        <button id="ai-btn-fetch-models" class="btn btn-info" style="white-space:nowrap">拉取模型</button>
+                    </div>
+                    <select id="ai-cfg-model-select" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary)"></select>
+                </div>
+
+                <!-- 联网搜索（按模型独立配置） -->
+                <div style="margin-bottom:14px;padding:10px 12px;border:1px dashed var(--border-color);border-radius:8px;background:linear-gradient(90deg, rgba(102,126,234,0.06), transparent 80%)">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+                        <input type="checkbox" id="ai-cfg-web-enabled"> <span>🌐 启用联网搜索（function calling）</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text-secondary);margin:6px 0 8px;line-height:1.6">
+                        开启后，AI 会自主决定是否调用 <code>web_search</code> / <code>web_fetch</code> 工具。要求模型支持 OpenAI 风格 tools（如 Qwen2.5 / GLM-4 / DeepSeek）。<b>目标站点需允许跨域（CORS）</b>，否则浏览器会拒绝抓取。
+                    </div>
+                    <label class="ai-label" style="font-size:11.5px">搜索引擎 URL 模板（可选）</label>
+                    <input type="text" id="ai-cfg-search-url" class="ai-input" placeholder="留空使用内置搜索；自定义请填 https://your-site/search?q={q}">
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                        <code>{q}</code> 会被替换成关键词。如需自建反代请参考项目下 <code>worker-search-proxy/</code> 目录。
+                    </div>
+                </div>
+
+                <div style="margin-bottom:14px">
+                    <label class="ai-label" style="display:flex;justify-content:space-between;align-items:center">
+                        <span>系统提示词 (System Prompt)</span>
+                        <button type="button" id="ai-btn-reset-system" style="background:none;border:none;color:var(--accent-color);font-size:11px;cursor:pointer;padding:2px 6px">恢复默认</button>
+                    </label>
+                    <div id="ai-tpl-list" class="ai-tpl-grid"></div>
+                    <textarea id="ai-cfg-system" class="ai-input" rows="4" placeholder="留空 = 不发送 system 消息；点上方「恢复默认」可填入百宝箱推荐的提示词"></textarea>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">点上方模板可一键切换"人设"，也可以在下面手动改写。留空则不发送 system 消息。</div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                    <div>
+                        <label class="ai-label">Temperature <span id="ai-cfg-temp-val" style="color:var(--accent-color)">0.7</span></label>
+                        <input type="range" id="ai-cfg-temperature" min="0" max="2" step="0.1" value="0.7" style="width:100%">
+                        <div style="font-size:11px;color:var(--text-secondary)">越高越发散（0 严谨，2 狂野）</div>
+                    </div>
+                    <div>
+                        <label class="ai-label">Top P <span id="ai-cfg-topp-val" style="color:var(--accent-color)">1</span></label>
+                        <input type="range" id="ai-cfg-top-p" min="0" max="1" step="0.05" value="1" style="width:100%">
+                        <div style="font-size:11px;color:var(--text-secondary)">采样范围，一般用 temp 即可</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                    <div>
+                        <label class="ai-label">最大 Tokens</label>
+                        <input type="number" id="ai-cfg-max-tokens" class="ai-input" value="2048" min="1" max="32768">
+                    </div>
+                    <div>
+                        <label class="ai-label">上下文消息数</label>
+                        <input type="number" id="ai-cfg-context-len" class="ai-input" value="20" min="0" max="200">
+                        <div style="font-size:11px;color:var(--text-secondary)">每次带最近 N 条历史（开启下方压缩后由压缩配置接管）</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                    <div>
+                        <label class="ai-label">Frequency Penalty <span id="ai-cfg-fp-val" style="color:var(--accent-color)">0</span></label>
+                        <input type="range" id="ai-cfg-frequency-penalty" min="-2" max="2" step="0.1" value="0" style="width:100%">
+                        <div style="font-size:11px;color:var(--text-secondary)">抑制重复用词</div>
+                    </div>
+                    <div>
+                        <label class="ai-label">Presence Penalty <span id="ai-cfg-pp-val" style="color:var(--accent-color)">0</span></label>
+                        <input type="range" id="ai-cfg-presence-penalty" min="-2" max="2" step="0.1" value="0" style="width:100%">
+                        <div style="font-size:11px;color:var(--text-secondary)">鼓励聊新话题</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:14px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <input type="checkbox" id="ai-cfg-stream" checked> <span>流式输出（推荐开启，边生成边显示）</span>
+                    </label>
+                </div>
+
+                <!-- 会话压缩 -->
+                <div style="margin-bottom:14px;padding:12px;border:1px dashed var(--border-color);border-radius:8px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+                        <input type="checkbox" id="ai-cfg-compress-enabled"> <span>开启长对话自动压缩</span>
+                    </label>
+                    <div style="font-size:11px;color:var(--text-secondary);margin:6px 0 10px;line-height:1.6">
+                        达到阈值后，自动调用同一个 AI 把早期消息总结成"上下文摘要"。<b>聊天界面里所有消息原样保留</b>，只是发给 AI 的上下文用摘要 + 最近 N 条代替，省 token 不丢上下文。
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                        <div>
+                            <label class="ai-label">触发阈值（条）</label>
+                            <input type="number" id="ai-cfg-compress-threshold" class="ai-input" value="20" min="4" max="200">
+                            <div style="font-size:11px;color:var(--text-secondary)">累计 ≥ 这么多未压缩消息时触发</div>
+                        </div>
+                        <div>
+                            <label class="ai-label">保留最近（条）</label>
+                            <input type="number" id="ai-cfg-compress-keeplast" class="ai-input" value="6" min="1" max="50">
+                            <div style="font-size:11px;color:var(--text-secondary)">最近 N 条原文不压缩</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skills 技能库 -->
+                <div style="margin-bottom:14px;padding:12px;border:1px dashed var(--border-color);border-radius:8px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <label class="ai-label" style="margin:0">🧩 技能库（启用后注入到 system 提示词）</label>
+                        <div style="display:flex;gap:6px">
+                            <button type="button" class="btn btn-info" id="ai-skill-import" style="padding:4px 10px;font-size:12px;height:28px">📥 从 .md/.txt 导入</button>
+                            <button type="button" class="btn btn-info" id="ai-skill-add" style="padding:4px 10px;font-size:12px;height:28px">+ 手动新建</button>
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;line-height:1.6">
+                        技能 = 一段额外的 system 提示词。打勾启用后，每次请求都会拼接到 system 消息里。例如导入"React 最佳实践"、"代码评审清单"等。<b>全局生效</b>，所有模型共用。
+                    </div>
+                    <div class="ai-skill-list" id="ai-skill-list"></div>
+                </div>
+
+                <div style="background:var(--bg-darker);padding:10px 12px;border-radius:6px;font-size:11px;color:var(--text-secondary);line-height:1.7">
+                    💡 <b>提示</b>：所有设置都保存在本地浏览器（localStorage），刷新不丢；API Key 仅本地存储，不会上传到任何服务器。
+                </div>
+            </div>
+            <div style="padding:14px 25px;border-top:2px solid var(--border-color);display:flex;justify-content:flex-end;gap:10px;background:var(--bg-darker)">
+                <button id="ai-btn-cancel-settings" class="btn btn-warning">取消</button>
+                <button id="ai-btn-save-settings" class="btn btn-primary">保存设置</button>
             </div>
         </div>
     </div>
@@ -2358,6 +2618,24 @@
     <!-- 音乐播放器开关按钮 -->
     <button id="btn-toggle-player" style="position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 24px; z-index: 1400; transition: all 0.3s;">🎵</button>
 
+    <!-- 备忘录到期提醒弹窗 -->
+    <div id="rem-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:2200;align-items:center;justify-content:center">
+        <div style="background:var(--bg-panel);border-radius:16px;width:90%;max-width:480px;border:2px solid var(--accent-color);box-shadow:0 20px 60px rgba(0,0,0,0.35);overflow:hidden">
+            <div style="padding:18px 22px;background:linear-gradient(135deg,rgba(245,158,11,0.18),rgba(239,68,68,0.12));border-bottom:1px solid var(--border-color);display:flex;align-items:center;gap:10px">
+                <div style="font-size:28px;animation:rem-shake 1s ease-in-out infinite">⏰</div>
+                <div>
+                    <div style="font-weight:700;font-size:16px;color:var(--text-primary)">提醒到期</div>
+                    <div id="rem-modal-time" style="font-size:12px;color:var(--text-secondary);margin-top:2px"></div>
+                </div>
+            </div>
+            <div style="padding:24px 22px;font-size:15px;line-height:1.7;color:var(--text-primary);white-space:pre-wrap;word-break:break-word" id="rem-modal-content"></div>
+            <div style="padding:14px 22px;border-top:1px solid var(--border-color);display:flex;justify-content:flex-end;gap:10px;background:var(--bg-darker)">
+                <button class="btn btn-warning" id="rem-modal-later" title="稍后再提，下次打开页面继续提醒">稍后再说</button>
+                <button class="btn btn-primary" id="rem-modal-ack" title="确认知道，以后不再提醒此条">✓ 知道了</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 引入 JS 库 -->
     <script src="lib/three.min.js"></script>
     <script src="lib/qrcode.min.js"></script>
@@ -2405,6 +2683,10 @@
     <script src="js/vue-playground.js"></script>
     <script src="js/vue-docs.js"></script>
     <script src="js/eui-docs.js"></script>
+    <!-- AI 助手 -->
+    <script src="js/ai-chat.js"></script>
+    <!-- 备忘录提醒 -->
+    <script src="js/reminder.js"></script>
     <!-- 页面元信息（hero 标题区） -->
     <script src="js/page-meta.js"></script>
     <!-- 离线检测：天气/音乐无网时自动隐藏 -->

@@ -19,14 +19,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnClear = document.getElementById('btn-clear');
 
     // ---------------------------------------------------------
-    // 导航逻辑
+    // 导航逻辑（含上次页面记忆）
     // ---------------------------------------------------------
+    const LS_LAST_PAGE = 'toolbox_last_page';
+
     navItems.forEach(item => {
         item.addEventListener('click', () => {
             // 移除所有激活状态
             navItems.forEach(nav => nav.classList.remove('active'));
             pages.forEach(page => page.classList.remove('active'));
-            
+
             // 激活当前项
             item.classList.add('active');
             const targetId = item.getAttribute('data-target');
@@ -34,12 +36,27 @@ document.addEventListener('DOMContentLoaded', () => {
             if (targetPage) {
                 targetPage.classList.add('active');
             }
-            
+
             // 更新标题
             const text = item.querySelector('span').textContent;
             pageTitle.textContent = text + '工具';
+
+            // 记住当前页（下次打开自动恢复）
+            try { localStorage.setItem(LS_LAST_PAGE, targetId); } catch {}
         });
     });
+
+    // 启动时恢复上次页面（延后到 offline-detect 之后，避免恢复了一个被禁用的页）
+    setTimeout(() => {
+        try {
+            const last = localStorage.getItem(LS_LAST_PAGE);
+            if (!last || last === 'json') return;
+            const item = document.querySelector(`.nav-item[data-target="${last}"]`);
+            if (!item) return;
+            if (item.style.display === 'none') return; // 离线被隐藏的不恢复
+            item.click();
+        } catch {}
+    }, 500);
 
     // ---------------------------------------------------------
     // SQL 字段清洗逻辑
