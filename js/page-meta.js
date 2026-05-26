@@ -45,6 +45,9 @@
 
         // AI 助手
         aichat:     { icon: 'icon-ai',        title: 'AI 对话助手',       desc: '本地 Ollama / 中转站 OpenAI 兼容接口 · 流式输出 · 导出 HTML' },
+
+        // 效率
+        reminder:   { icon: 'icon-clock-cog', title: '备忘录提醒',        desc: '到点弹窗提醒 · 仅本地存储 · 支持稍后再说 / 已知道了' },
     };
 
     function applyMeta(targetId) {
