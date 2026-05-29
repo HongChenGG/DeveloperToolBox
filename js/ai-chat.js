@@ -1611,6 +1611,77 @@
     background: rgba(255,255,255,.2); color: #fff;
   }
 
+  /* 代码块外壳:深色头部(语言标签 + 复制按钮) */
+  .ai-code-block {
+    background: #0d1117;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 14px 0;
+    border: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  }
+  .ai-code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px 6px 16px;
+    background: linear-gradient(180deg, #1c2128 0%, #161b22 100%);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .ai-code-lang {
+    color: #8b949e;
+    font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: .5px;
+    text-transform: lowercase;
+    user-select: none;
+  }
+  .ai-code-copy-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.14);
+    color: #c9d1d9;
+    padding: 3px 11px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+    transition: all .18s ease;
+    display: inline-flex;
+    align-items: center;
+    line-height: 1;
+  }
+  .ai-code-copy-btn:hover {
+    background: rgba(255,255,255,.08);
+    border-color: rgba(255,255,255,.28);
+    color: #fff;
+  }
+  .ai-code-copy-btn.copied {
+    background: rgba(16,185,129,.18);
+    border-color: rgba(16,185,129,.45);
+    color: #6ee7b7;
+  }
+  .ai-code-block pre {
+    margin: 0;
+    background: transparent;
+    padding: 14px 16px;
+    border-radius: 0;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.62;
+    color: #e6edf3;
+    border: none;
+  }
+  .ai-code-block pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+    font-family: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+  }
+  /* 用户气泡里的代码块在浅色背景上仍保持深色外观 */
+  .msg.user .ai-code-block { box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+
   /* highlight.js · atom-one-dark 主题（内联,离线可用） */
   pre code.hljs{display:block;overflow-x:auto;padding:1em}
   code.hljs{padding:3px 5px}
@@ -1664,6 +1735,12 @@
 </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5 15H4C3.46957 15 2.96086 14.7893 2.58579 14.4142C2.21071 14.0391 2 13.5304 2 13V4C2 3.46957 2.21071 2.96086 2.58579 2.58579C2.96086 2.21071 3.46957 2 4 2H13C13.5304 2 14.0391 2.21071 14.4142 2.58579C14.7893 2.96086 15 3.46957 15 4V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
   <div class="wrap">
     <div class="header">
       <h1>${escapeHtml(s.title)}</h1>
@@ -1676,6 +1753,30 @@
     ${msgsHtml}
     <div class="footer">由 <a href="#">红尘百宝箱 · AI 对话助手</a> 导出</div>
   </div>
+  <script>
+    // 离线"复制"按钮:点击复制代码块原文
+    document.querySelectorAll('.ai-code-copy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.closest('.ai-code-block')?.querySelector('pre code');
+        if (!code) return;
+        const text = code.innerText;
+        const fallback = () => {
+          const ta = document.createElement('textarea');
+          ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); } catch (e) {}
+          document.body.removeChild(ta);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(fallback);
+        } else { fallback(); }
+        const originalText = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = '✓ 已复制';
+        setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = originalText; }, 1200);
+      });
+    });
+  </script>
 </body>
 </html>`;
         } finally {
