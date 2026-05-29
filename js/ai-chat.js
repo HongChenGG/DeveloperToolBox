@@ -124,7 +124,16 @@
             return merged;
         } catch { return JSON.parse(JSON.stringify(DEFAULT_CFG)); }
     }
-    function saveCfg() { localStorage.setItem(LS_CFG, JSON.stringify(cfg)); }
+    function saveCfg() {
+        try {
+            localStorage.setItem(LS_CFG, JSON.stringify(cfg));
+        } catch (e) {
+            console.warn('[ai-chat] saveCfg 失败:', e.message);
+            if (typeof showToast === 'function') {
+                showToast('保存配置失败:' + (e.name === 'QuotaExceededError' ? 'localStorage 已满,请清理旧会话' : e.message), 'error');
+            }
+        }
+    }
 
     // 返回当前激活模型（用于发送 / 状态显示）
     function getProfile() {
@@ -141,7 +150,16 @@
             return raw ? JSON.parse(raw) : [];
         } catch { return []; }
     }
-    function saveSessions() { localStorage.setItem(LS_SES, JSON.stringify(sessions)); }
+    function saveSessions() {
+        try {
+            localStorage.setItem(LS_SES, JSON.stringify(sessions));
+        } catch (e) {
+            console.warn('[ai-chat] saveSessions 失败:', e.message);
+            if (typeof showToast === 'function') {
+                showToast('保存会话失败:' + (e.name === 'QuotaExceededError' ? 'localStorage 已满,请删除旧会话' : e.message), 'error');
+            }
+        }
+    }
 
     function getCurrent() {
         return sessions.find(s => s.id === currentId);
@@ -274,7 +292,21 @@
 
     // marked 全局配置：GFM + 换行符识别（中文场景更顺手）
     if (typeof marked !== 'undefined' && marked.setOptions) {
-        marked.setOptions({ gfm: true, breaks: true, pedantic: false });
+        const opts = { gfm: true, breaks: true, pedantic: false };
+        // 接入 highlight.js 做代码块语法高亮（lib/highlight.min.js + atom-one-dark 主题）
+        if (typeof hljs !== 'undefined') {
+            opts.highlight = function(code, lang) {
+                try {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                } catch (e) {
+                    return code;
+                }
+            };
+        }
+        marked.setOptions(opts);
     }
 
     // 中文与 ** / * 紧邻时 CommonMark 不认作加粗（CJK 不算单词边界）
@@ -354,10 +386,20 @@
 
     // 把 marked 输出的 <pre><code class="language-X">...</code></pre>
     // 包装成 OpenAI 风格：上方深色头部（语言名 + 复制按钮），下方代码
+    // 同时给 <code> 加上 'hljs' class，让 atom-one-dark 主题样式生效
     function enhanceCodeBlocks(html) {
         return html.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (m, attrs, code) => {
             const langMatch = attrs.match(/language-([\w+\-#.]+)/i);
             const language = langMatch ? langMatch[1] : 'text';
+            // 确保 class 里有 hljs（hljs 主题选择器靠这个）
+            let newAttrs = attrs;
+            if (/class="[^"]*"/.test(newAttrs)) {
+                if (!/\bhljs\b/.test(newAttrs)) {
+                    newAttrs = newAttrs.replace(/class="([^"]*)"/, 'class="$1 hljs"');
+                }
+            } else {
+                newAttrs = (newAttrs ? newAttrs + ' ' : ' ') + 'class="hljs"';
+            }
             return `<div class="ai-code-block">`
                 + `<div class="ai-code-header">`
                 +   `<span class="ai-code-lang">${escapeHtml(language)}</span>`
@@ -365,7 +407,7 @@
                 +     `<svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-2px;margin-right:4px"><use xlink:href="#icon-copy"></use></svg>复制`
                 +   `</button>`
                 + `</div>`
-                + `<pre><code${attrs}>${code}</code></pre>`
+                + `<pre><code${newAttrs}>${code}</code></pre>`
                 + `</div>`;
         });
     }
@@ -1200,15 +1242,20 @@
     function editSkill(sid) {
         const sk = (cfg.skills || []).find(x => x.id === sid);
         if (!sk) return;
-        const name = prompt('技能名称：', sk.name);
-        if (name === null) return;
-        if (name.trim()) sk.name = name.trim();
-        const content = prompt('技能内容（启用后作为 system 消息注入；支持 Markdown）：', sk.content);
-        if (content === null) return;
-        sk.content = content;
-        saveCfg();
-        renderSkillList();
-        showToast('技能已更新', 'success');
+        openSkillEditor({
+            title: '编辑技能',
+            namePlaceholder: '技能名称',
+            contentPlaceholder: '技能内容(Markdown)',
+            initName: sk.name,
+            initContent: sk.content || '',
+            onConfirm: (name, content) => {
+                sk.name = name;
+                sk.content = content;
+                saveCfg();
+                renderSkillList();
+                showToast('技能已更新', 'success');
+            }
+        });
     }
 
     function importSkillFromFile() {
@@ -1246,23 +1293,102 @@
     }
 
     function addSkillManual() {
-        const name = prompt('技能名称（例如：单元测试规范、代码评审清单）：');
-        if (!name || !name.trim()) return;
-        const content = prompt('技能内容（启用后作为 system 提示词注入，支持多行 Markdown）：');
-        if (content === null) return;
-        if (!Array.isArray(cfg.skills)) cfg.skills = [];
-        cfg.skills.push({
-            id: 'sk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
-            name: name.trim(),
-            content: content,
-            enabled: true,
-            source: 'manual',
-            createdAt: Date.now()
+        openSkillEditor({
+            title: '新增技能',
+            namePlaceholder: '例如:单元测试规范、代码评审清单',
+            contentPlaceholder: '启用后作为 system 提示词注入,支持多行 Markdown\n\n粘贴几百行内容也没问题',
+            onConfirm: (name, content) => {
+                if (!Array.isArray(cfg.skills)) cfg.skills = [];
+                cfg.skills.push({
+                    id: 'sk_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
+                    name: name,
+                    content: content,
+                    enabled: true,
+                    source: 'manual',
+                    createdAt: Date.now()
+                });
+                saveCfg();
+                renderSkillList();
+                updateSkillBadge();
+                showToast('已添加技能:' + name, 'success');
+            }
         });
-        saveCfg();
-        renderSkillList();
-        updateSkillBadge();
-        showToast('已添加技能：' + name, 'success');
+    }
+
+    /**
+     * 弹一个支持多行 textarea 的 Skill 编辑器,替代 prompt()
+     * 用原生 DOM,不依赖任何 UI 库,贴几百行 Markdown 没问题
+     */
+    function openSkillEditor({ title, namePlaceholder, contentPlaceholder, initName = '', initContent = '', onConfirm }) {
+        // 已有同类弹层先关掉,避免重复打开
+        const existing = document.getElementById('ai-skill-editor-mask');
+        if (existing) existing.remove();
+
+        const mask = document.createElement('div');
+        mask.id = 'ai-skill-editor-mask';
+        mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg-card,#1e1e2e);color:var(--text-primary,#eee);border:1px solid var(--border-color,#333);border-radius:12px;padding:20px;width:min(720px,92vw);max-height:85vh;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);';
+
+        const h = document.createElement('div');
+        h.textContent = title;
+        h.style.cssText = 'font-size:16px;font-weight:600;';
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.placeholder = namePlaceholder;
+        nameInput.value = initName;
+        nameInput.style.cssText = 'padding:8px 12px;background:var(--bg-darker,#111);border:1px solid var(--border-color,#333);color:inherit;border-radius:6px;font-size:14px;';
+
+        const contentInput = document.createElement('textarea');
+        contentInput.placeholder = contentPlaceholder;
+        contentInput.value = initContent;
+        contentInput.style.cssText = 'flex:1;min-height:300px;padding:10px 12px;background:var(--bg-darker,#111);border:1px solid var(--border-color,#333);color:inherit;border-radius:6px;font-family:Consolas,monospace;font-size:13px;line-height:1.5;resize:vertical;';
+
+        const tip = document.createElement('div');
+        tip.style.cssText = 'font-size:12px;color:var(--text-secondary,#888);';
+        tip.textContent = 'Ctrl + Enter 确认 · ESC 取消';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;';
+
+        const btnCancel = document.createElement('button');
+        btnCancel.textContent = '取消';
+        btnCancel.className = 'btn-ghost';
+        btnCancel.style.cssText = 'padding:6px 16px;background:transparent;border:1px solid var(--border-color,#444);color:inherit;border-radius:6px;cursor:pointer;';
+
+        const btnOk = document.createElement('button');
+        btnOk.textContent = '确认';
+        btnOk.style.cssText = 'padding:6px 16px;background:var(--accent-color,#7c8cff);border:none;color:white;border-radius:6px;cursor:pointer;font-weight:600;';
+
+        btnRow.appendChild(btnCancel);
+        btnRow.appendChild(btnOk);
+        box.appendChild(h);
+        box.appendChild(nameInput);
+        box.appendChild(contentInput);
+        box.appendChild(tip);
+        box.appendChild(btnRow);
+        mask.appendChild(box);
+        document.body.appendChild(mask);
+        nameInput.focus();
+
+        function close() { mask.remove(); document.removeEventListener('keydown', onKey); }
+        function confirm() {
+            const name = nameInput.value.trim();
+            const content = contentInput.value;
+            if (!name) { showToast('请填写技能名称', 'warning'); nameInput.focus(); return; }
+            close();
+            onConfirm(name, content);
+        }
+        function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); close(); }
+            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirm(); }
+        }
+        document.addEventListener('keydown', onKey);
+        btnCancel.addEventListener('click', close);
+        btnOk.addEventListener('click', confirm);
+        mask.addEventListener('click', e => { if (e.target === mask) close(); });
     }
 
     function updateSkillBadge() {
@@ -1335,54 +1461,200 @@
     }
 
     function buildExportHtml(s) {
-        const msgsHtml = s.messages.map(m => {
+        const msgsHtml = s.messages.map((m, idx) => {
             const isUser = m.role === 'user';
             const cls = isUser ? 'user' : 'assistant';
             const role = isUser ? '我' : 'AI 助手';
+            const avatar = isUser ? '我' : 'AI';
             const body = isUser ? `<div class="text">${escapeHtml(m.content)}</div>` : renderMd(m.content);
             const time = m.ts ? new Date(m.ts).toLocaleString('zh-CN') : '';
             return `
             <div class="msg ${cls}">
-                <div class="role">${role} <span class="time">${time}</span></div>
-                <div class="body">${body}</div>
+                <div class="avatar">${avatar}</div>
+                <div class="bubble">
+                    <div class="meta-row"><span class="role">${role}</span><span class="time">${time}</span></div>
+                    <div class="body">${body}</div>
+                </div>
             </div>`;
         }).join('\n');
+
+        const profile = getProfile();
+        const modelName = escapeHtml(profile.model || '未知');
+        const exportTime = new Date().toLocaleString('zh-CN');
 
         return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(s.title)} - AI 对话导出</title>
 <style>
-  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; max-width: 880px; margin: 0 auto; padding: 30px 20px; background:#f6f8fa; color:#24292e; line-height:1.6; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .meta { color:#666; font-size:12px; margin-bottom:24px; padding-bottom:12px; border-bottom:1px solid #ddd; }
-  .msg { margin-bottom: 20px; padding: 14px 18px; border-radius: 10px; }
-  .msg.user { background: #e3f2fd; }
-  .msg.assistant { background: #fff; border:1px solid #e1e4e8; }
-  .role { font-weight: 600; font-size: 13px; margin-bottom: 6px; color:#0366d6; }
-  .msg.user .role { color:#1976d2; }
-  .time { font-weight: 400; color:#999; font-size: 11px; margin-left: 6px; }
-  .body { font-size: 14px; }
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --text: #1f2328;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --primary: #4f46e5;
+    --primary-soft: #eef2ff;
+    --user-bg: linear-gradient(135deg,#6366f1,#8b5cf6);
+    --user-text: #ffffff;
+    --code-bg: #282c34;
+    --code-text: #abb2bf;
+    --inline-code-bg: #f3f4f6;
+    --shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Hiragino Sans GB',sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 36px 24px 60px; }
+  .header {
+    background: linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);
+    color: #fff; padding: 28px 32px; border-radius: 16px;
+    box-shadow: var(--shadow); margin-bottom: 28px;
+  }
+  .header h1 {
+    margin: 0 0 10px; font-size: 24px; font-weight: 600; letter-spacing: .3px;
+    word-break: break-word;
+  }
+  .header .meta {
+    display: flex; flex-wrap: wrap; gap: 18px;
+    font-size: 13px; opacity: .92;
+  }
+  .header .meta span { display: inline-flex; align-items: center; gap: 6px; }
+  .header .meta b { font-weight: 500; }
+
+  .msg { display: flex; gap: 12px; margin-bottom: 20px; align-items: flex-start; }
+  .msg.user { flex-direction: row-reverse; }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg,#10b981,#059669);
+  }
+  .msg.user .avatar { background: var(--user-bg); }
+
+  .bubble {
+    max-width: calc(100% - 60px);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 18px;
+    box-shadow: var(--shadow);
+  }
+  .msg.user .bubble {
+    background: var(--user-bg); border-color: transparent; color: var(--user-text);
+  }
+  .msg.user .bubble .role,
+  .msg.user .bubble .time { color: rgba(255,255,255,.85); }
+  .msg.user .bubble a { color: #fff; text-decoration: underline; }
+
+  .meta-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+  .role { font-weight: 600; font-size: 13px; color: var(--primary); }
+  .time { font-size: 11px; color: var(--muted); }
+
+  .body { font-size: 15px; word-wrap: break-word; overflow-wrap: break-word; }
+  .body > *:first-child { margin-top: 0; }
+  .body > *:last-child { margin-bottom: 0; }
   .text { white-space: pre-wrap; word-break: break-word; }
-  pre { background:#0d1117; color:#e6edf3; padding:14px; border-radius:6px; overflow-x:auto; font-size:13px; }
-  code { background:#f3f4f6; padding:1px 5px; border-radius:3px; font-size:13px; font-family: Consolas,'Courier New',monospace; }
-  pre code { background:transparent; padding:0; color:inherit; }
-  blockquote { border-left:4px solid #dfe2e5; margin:0; padding:0 12px; color:#666; }
-  table { border-collapse: collapse; margin: 8px 0; }
-  th, td { border:1px solid #dfe2e5; padding:6px 10px; font-size:13px; }
-  th { background:#f6f8fa; }
-  hr { border:none; border-top:1px solid #ddd; margin: 16px 0; }
-  .footer { margin-top:30px; padding-top:12px; border-top:1px solid #ddd; color:#888; font-size:11px; text-align:center; }
+
+  .body h1, .body h2, .body h3, .body h4 {
+    margin: 18px 0 10px; font-weight: 600; line-height: 1.4;
+  }
+  .body h1 { font-size: 22px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+  .body h2 { font-size: 19px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .body h3 { font-size: 17px; }
+  .body h4 { font-size: 15px; color: var(--muted); }
+  .body p { margin: 8px 0; }
+  .body ul, .body ol { margin: 8px 0; padding-left: 26px; }
+  .body li { margin: 4px 0; }
+
+  pre {
+    background: var(--code-bg); color: var(--code-text);
+    padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+    font-size: 13px; line-height: 1.55; margin: 10px 0;
+    font-family: 'JetBrains Mono','Fira Code',Consolas,'Courier New',monospace;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; font-size: inherit; }
+  code {
+    background: var(--inline-code-bg); padding: 2px 6px; border-radius: 4px;
+    font-size: 13px;
+    font-family: 'JetBrains Mono','Fira Code',Consolas,'Courier New',monospace;
+    color: #be185d;
+  }
+  .msg.user .bubble code {
+    background: rgba(255,255,255,.2); color: #fff;
+  }
+
+  /* highlight.js · atom-one-dark 主题（内联,离线可用） */
+  pre code.hljs{display:block;overflow-x:auto;padding:1em}
+  code.hljs{padding:3px 5px}
+  .hljs{color:#abb2bf;background:#282c34}
+  .hljs-comment,.hljs-quote{color:#5c6370;font-style:italic}
+  .hljs-doctag,.hljs-formula,.hljs-keyword{color:#c678dd}
+  .hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e06c75}
+  .hljs-literal{color:#56b6c2}
+  .hljs-addition,.hljs-attribute,.hljs-meta .hljs-string,.hljs-regexp,.hljs-string{color:#98c379}
+  .hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#d19a66}
+  .hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#61aeee}
+  .hljs-built_in,.hljs-class .hljs-title,.hljs-title.class_{color:#e6c07b}
+  .hljs-emphasis{font-style:italic}
+  .hljs-strong{font-weight:700}
+  .hljs-link{text-decoration:underline}
+
+  blockquote {
+    border-left: 4px solid var(--primary); margin: 10px 0;
+    padding: 6px 14px; color: var(--muted); background: var(--primary-soft);
+    border-radius: 0 6px 6px 0;
+  }
+
+  table { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+  th { background: #f9fafb; font-weight: 600; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .footer {
+    margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; text-align: center;
+  }
+  .footer a { color: var(--primary); }
+
+  @media (max-width: 600px) {
+    .wrap { padding: 18px 12px 40px; }
+    .header { padding: 20px; border-radius: 12px; }
+    .header h1 { font-size: 19px; }
+    .bubble { padding: 12px 14px; max-width: calc(100% - 50px); }
+    .avatar { width: 32px; height: 32px; font-size: 12px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .header { background: #f3f4f6; color: #1f2328; box-shadow: none; }
+    .msg { page-break-inside: avoid; }
+    .bubble, pre { box-shadow: none; }
+  }
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(s.title)}</h1>
-  <div class="meta">
-    导出时间：${new Date().toLocaleString('zh-CN')} · 消息数：${s.messages.length} · 模型：${escapeHtml(getProfile().model || '未知')}
+  <div class="wrap">
+    <div class="header">
+      <h1>${escapeHtml(s.title)}</h1>
+      <div class="meta">
+        <span><b>导出</b> ${exportTime}</span>
+        <span><b>消息</b> ${s.messages.length} 条</span>
+        <span><b>模型</b> ${modelName}</span>
+      </div>
+    </div>
+    ${msgsHtml}
+    <div class="footer">由 <a href="#">红尘百宝箱 · AI 对话助手</a> 导出</div>
   </div>
-  ${msgsHtml}
-  <div class="footer">由 红尘百宝箱 · AI 对话助手 导出</div>
 </body>
 </html>`;
     }

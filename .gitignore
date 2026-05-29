@@ -1,0 +1,16 @@
+# 本地自用,不提交
+skills/
+_patch_*/
+.claude/
+
+# 系统/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 编辑器临时文件
+*.swp
+*~
+*.bak
+*.bak.*
