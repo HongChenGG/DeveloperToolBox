@@ -291,11 +291,14 @@
     }
 
     // marked 全局配置：GFM + 换行符识别（中文场景更顺手）
+    // 流式渲染时跳过高亮(避免每 80ms 跑一次 highlightAuto 拖慢流式速度),结束时再渲一次完整高亮
+    let _skipHighlight = false;
     if (typeof marked !== 'undefined' && marked.setOptions) {
         const opts = { gfm: true, breaks: true, pedantic: false };
         // 接入 highlight.js 做代码块语法高亮（lib/highlight.min.js + atom-one-dark 主题）
         if (typeof hljs !== 'undefined') {
             opts.highlight = function(code, lang) {
+                if (_skipHighlight) return code;  // 流式中跳过,流结束时由 finalRender 整体重渲
                 try {
                     if (lang && hljs.getLanguage(lang)) {
                         return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
@@ -913,6 +916,8 @@
         } else {
             _lastRender = Date.now();
         }
+        // 流式中:跳过高亮以加速;force=true 时(流结束/非流式)正常高亮
+        _skipHighlight = !force;
         const bubbles = $msgs.querySelectorAll('.ai-bubble-assistant .ai-msg-content');
         const last = bubbles[bubbles.length - 1];
         if (last) {
