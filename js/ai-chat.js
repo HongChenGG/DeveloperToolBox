@@ -1400,7 +1400,8 @@
         }
         function onKey(e) {
             if (e.key === 'Escape') { e.preventDefault(); close(); }
-            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); confirm(); }
+            // Ctrl+Enter 确认,但 IME 候选期间放行让回车确认上屏
+            else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); confirm(); }
         }
         document.addEventListener('keydown', onKey);
         btnCancel.addEventListener('click', close);
@@ -1830,7 +1831,10 @@
         });
         $btnStop.addEventListener('click', stopStreaming);
         $input.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // IME 候选状态时回车应该是"确认上屏",不能触发发送
+            // - e.isComposing: 标准 IME 标志(Mac 中文/日文/韩文输入法都会设)
+            // - e.keyCode === 229: 部分老 Safari/Firefox 在候选期 isComposing 为 false 时的兜底判断
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
                 e.preventDefault();
                 if (isStreaming) {
                     showToast('上一条还在生成中，请等待或点 ⏹ 停止', 'warning');
