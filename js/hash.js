@@ -48,7 +48,13 @@
 
         async function calcFile(file) {
             if (!file) return;
-            fileInfo.textContent = `文件: ${file.name}（${(file.size / 1024).toFixed(2)} KB）计算中...`;
+            // 限制文件大小:超过 500MB 的文件 arrayBuffer 一次性读会爆浏览器内存
+            if (file.size > 500 * 1024 * 1024) {
+                fileInfo.textContent = `文件 ${file.name}(${(file.size / 1024 / 1024).toFixed(0)} MB)过大,已拒绝(限制 500MB)`;
+                showToast && showToast('文件过大,超过 500MB', 'error');
+                return;
+            }
+            fileInfo.textContent = `文件: ${file.name}(${(file.size / 1024).toFixed(2)} KB)计算中...`;
             const buf = await file.arrayBuffer();
             const wordArray = CryptoJS.lib.WordArray.create(buf);
             const md5 = CryptoJS.MD5(wordArray).toString();

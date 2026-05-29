@@ -3,16 +3,72 @@
     'use strict';
 
     function parseClass(src) {
-        const classMatch = src.match(/(?:^|\s)(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/);
+        // 预处理:剥掉所有 @注解 行(包括带参数的多行注解和单行注解)
+        // 例:@Column("user_id") / @NotBlank / @JsonProperty(value = "x") 都剔除
+        const cleanSrc = stripAnnotations(src);
+        const classMatch = cleanSrc.match(/(?:^|\s)(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/);
         if (!classMatch) throw new Error('未找到 class 定义');
         const name = classMatch[1];
         const fields = [];
-        const fieldRegex = /(?:^|\n)\s*(?:private|protected|public)\s+(?:final\s+)?(\w+(?:<[^>]+>)?(?:\[\])?)\s+(\w+)\s*(?:=\s*[^;]+)?;/g;
+        // 字段正则:用零宽断言保证 private/protected/public 前是行首/分号/花括号(避免吞掉边界字符导致下一次匹配错位)
+        const fieldRegex = /(?<=^|[\n;{])\s*(?:private|protected|public)\s+(?:static\s+)?(?:final\s+)?(\w+(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?(?:\[\])?)\s+(\w+)\s*(?:=\s*[^;]+)?;/g;
         let m;
-        while ((m = fieldRegex.exec(src)) !== null) {
+        while ((m = fieldRegex.exec(cleanSrc)) !== null) {
             fields.push({ type: m[1], name: m[2] });
         }
         return { name, fields };
+    }
+
+    // 剥掉 @Annotation / @Annotation(...) (支持多行参数和嵌套括号)
+    function stripAnnotations(src) {
+        let out = '';
+        const len = src.length;
+        let i = 0;
+        while (i < len) {
+            const c = src[i];
+            // 字符串字面量整体保留
+            if (c === '"' || c === "'") {
+                out += c; i++;
+                while (i < len && src[i] !== c) {
+                    if (src[i] === '\\' && i + 1 < len) { out += src[i] + src[i + 1]; i += 2; continue; }
+                    out += src[i]; i++;
+                }
+                if (i < len) { out += src[i]; i++; }
+                continue;
+            }
+            // @ 开头的注解
+            if (c === '@' && i + 1 < len && /[A-Za-z_]/.test(src[i + 1])) {
+                i++;  // 吃掉 @
+                while (i < len && /[\w.]/.test(src[i])) i++;  // 注解名(支持包名)
+                // 跳过空白后看是否有 ( 参数列表
+                let j = i;
+                while (j < len && /\s/.test(src[j])) j++;
+                if (j < len && src[j] === '(') {
+                    let depth = 1;
+                    j++;
+                    while (j < len && depth > 0) {
+                        const cj = src[j];
+                        if (cj === '"' || cj === "'") {
+                            j++;
+                            while (j < len && src[j] !== cj) {
+                                if (src[j] === '\\' && j + 1 < len) { j += 2; continue; }
+                                j++;
+                            }
+                            if (j < len) j++;
+                            continue;
+                        }
+                        if (cj === '(') depth++;
+                        else if (cj === ')') depth--;
+                        j++;
+                    }
+                    i = j;
+                }
+                out += ' ';
+                continue;
+            }
+            out += c; i++;
+        }
+        return out;
     }
 
     function generate(srcCls, dstCls, mode) {

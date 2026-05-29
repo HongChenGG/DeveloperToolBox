@@ -134,6 +134,12 @@
         importFile && importFile.addEventListener('change', e => {
             const f = e.target.files[0];
             if (!f) return;
+            // 限制文件大小:JSON 配置文件不该超过 10MB,防误导大文件爆浏览器
+            if (f.size > 10 * 1024 * 1024) {
+                showToast && showToast('文件过大(>10MB),不像是片段配置,已拒绝', 'error');
+                importFile.value = '';
+                return;
+            }
             const reader = new FileReader();
             reader.onload = () => {
                 try {

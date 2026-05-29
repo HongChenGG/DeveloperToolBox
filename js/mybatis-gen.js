@@ -11,17 +11,17 @@
     // SQL 类型 → Java
     function sqlToJava(t) {
         t = t.toLowerCase().replace(/\(.*/, '');
-        if (/(varchar|char|text|json|enum)/.test(t)) return 'String';
+        if (/(varchar|char|text|json|enum|uuid)/.test(t)) return 'String';
         if (/tinyint|smallint/.test(t)) return 'Integer';
         if (/bigint|long/.test(t)) return 'Long';
         if (/int/.test(t)) return 'Integer';
-        if (/decimal|numeric/.test(t)) return 'BigDecimal';
-        if (/float|double/.test(t)) return 'Double';
-        if (/datetime|timestamp/.test(t)) return 'Date';
-        if (/date/.test(t)) return 'Date';
-        if (/time/.test(t)) return 'Date';
+        if (/decimal|numeric|number/.test(t)) return 'BigDecimal';
+        if (/float|double|real/.test(t)) return 'Double';
+        if (/datetime|timestamp/.test(t)) return 'LocalDateTime';
+        if (/date/.test(t)) return 'LocalDate';
+        if (/time/.test(t)) return 'LocalTime';
         if (/bool|bit/.test(t)) return 'Boolean';
-        if (/blob|binary/.test(t)) return 'byte[]';
+        if (/blob|binary|varbinary|image/.test(t)) return 'byte[]';
         return 'String';
     }
     // SQL 类型 → JdbcType
@@ -44,29 +44,40 @@
     }
 
     function parseDDL(ddl) {
-        const tableMatch = ddl.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?/i);
+        const tableMatch = ddl.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"\[]?(\w+)[`"\]]?/i);
         if (!tableMatch) throw new Error('未找到 CREATE TABLE 语句');
         const table = tableMatch[1];
-        const bodyMatch = ddl.match(/\(([\s\S]+)\)\s*(?:ENGINE|COMMENT|;|$)/i);
-        if (!bodyMatch) throw new Error('未找到字段定义体');
-        const body = bodyMatch[1];
+        // 用括号深度匹配字段定义体,避免 PARTITION/ROW_FORMAT/COMMENT 后置子句干扰
+        const openIdx = ddl.indexOf('(', tableMatch.index);
+        if (openIdx === -1) throw new Error('未找到字段定义体');
+        let depth = 0, closeIdx = -1;
+        for (let i = openIdx; i < ddl.length; i++) {
+            const ch = ddl[i];
+            if (ch === '(') depth++;
+            else if (ch === ')') { depth--; if (depth === 0) { closeIdx = i; break; } }
+        }
+        if (closeIdx === -1) throw new Error('字段定义体括号未闭合');
+        const body = ddl.substring(openIdx + 1, closeIdx);
+
+        // 按顶层逗号切字段(忽略嵌套括号 / 字符串字面量),不强制要求换行
+        const fieldDefs = splitTopLevelComma(body);
 
         const cols = [];
         let pk = null;
-        body.split(/,\s*\n/).forEach(line => {
+        fieldDefs.forEach(line => {
             line = line.trim();
             if (!line) return;
             if (/^PRIMARY\s+KEY/i.test(line)) {
-                const m = line.match(/PRIMARY\s+KEY\s*\(\s*`?(\w+)`?/i);
+                const m = line.match(/PRIMARY\s+KEY\s*\(\s*[`"\[]?(\w+)/i);
                 if (m) pk = m[1];
                 return;
             }
-            if (/^(UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN)/i.test(line)) return;
-            const m = line.match(/`?(\w+)`?\s+([A-Z]+(?:\([^)]+\))?)/i);
+            if (/^(UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN|CHECK)/i.test(line)) return;
+            const m = line.match(/[`"\[]?(\w+)[`"\]]?\s+([A-Za-z]+(?:\([^)]+\))?)/);
             if (m) {
                 const name = m[1];
                 const type = m[2];
-                const isAutoInc = /AUTO_INCREMENT/i.test(line);
+                const isAutoInc = /AUTO_INCREMENT|IDENTITY/i.test(line);
                 const comment = (line.match(/COMMENT\s+['"]([^'"]+)['"]/i) || [])[1] || '';
                 cols.push({ name, type, isAutoInc, comment });
                 if (isAutoInc) pk = pk || name;
@@ -77,6 +88,33 @@
         return { table, cols, pk };
     }
 
+    // 按顶层逗号切分(忽略嵌套括号和字符串字面量)
+    function splitTopLevelComma(str) {
+        const out = [];
+        let cur = '';
+        let depth = 0;
+        const len = str.length;
+        let i = 0;
+        while (i < len) {
+            const c = str[i];
+            if (c === "'" || c === '"' || c === '`') {
+                cur += c; i++;
+                while (i < len && str[i] !== c) {
+                    if (str[i] === '\\' && i + 1 < len) { cur += str[i] + str[i + 1]; i += 2; continue; }
+                    cur += str[i]; i++;
+                }
+                if (i < len) { cur += str[i]; i++; }
+                continue;
+            }
+            if (c === '(') { depth++; cur += c; i++; continue; }
+            if (c === ')') { depth--; cur += c; i++; continue; }
+            if (c === ',' && depth === 0) { out.push(cur); cur = ''; i++; continue; }
+            cur += c; i++;
+        }
+        if (cur.trim()) out.push(cur);
+        return out;
+    }
+
     function genEntity(pkg, info, useLombok) {
         const entityName = snake2Camel(info.table, true);
         const lines = [];
@@ -85,8 +123,10 @@
         const imports = new Set();
         info.cols.forEach(c => {
             const t = sqlToJava(c.type);
-            if (t === 'Date') imports.add('import java.util.Date;');
-            if (t === 'BigDecimal') imports.add('import java.math.BigDecimal;');
+            if (t === 'LocalDateTime') imports.add('import java.time.LocalDateTime;');
+            if (t === 'LocalDate')     imports.add('import java.time.LocalDate;');
+            if (t === 'LocalTime')     imports.add('import java.time.LocalTime;');
+            if (t === 'BigDecimal')    imports.add('import java.math.BigDecimal;');
         });
         imports.forEach(i => lines.push(i));
         if (useLombok) {
