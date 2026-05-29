@@ -328,8 +328,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentTableNameSpan.textContent = parsedTableName;
             }
             
-            // 分割列名，处理反引号
-            parsedColumns = columnsStr.split(',').map(c => c.trim());
+            // 分割列名,处理三种引号:`col`(MySQL) / [col](SQL Server / 达梦) / "col"(标准)
+            // 用 splitSqlValues 顺便处理掉列名内含括号/逗号的极端情况
+            parsedColumns = splitSqlValues(columnsStr).map(c => c.trim());
             
             // 渲染选择区
             renderColumnSelector();
@@ -341,8 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderColumnSelector() {
         columnList.innerHTML = '';
         parsedColumns.forEach((col, index) => {
-            // col 可能带有反引号，显示时去掉比较好看，但保留原始值用于匹配？其实主要用 index
-            const cleanName = col.replace(/`/g, '');
+            // col 可能带 `col` / [col] / "col" 三种引号,显示时去掉,但 parsedColumns 原值保留
+            const cleanName = col.replace(/^[`"\[]+|[`"\]]+$/g, '');
             
             const label = document.createElement('label');
             label.style.cssText = `
@@ -432,81 +433,208 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function processInsertSql(sql, indicesToRemove, targetTableName) {
-        // 1. 分离头部 (INSERT ... VALUES) 和 值部分
-        const valuesIndex = sql.toUpperCase().indexOf('VALUES');
+        // 1. 用方言无关的扫描器找 VALUES 关键字（跳过字符串/标识符内的同名片段）
+        const valuesIndex = findKeywordOutsideQuotes(sql, 'VALUES');
         if (valuesIndex === -1) return sql;
 
-        // const headerPart = sql.substring(0, valuesIndex + 6); // 废弃，我们需要重组头部
         const valuesPart = sql.substring(valuesIndex + 6).trim();
 
         // 2. 处理新的列名列表
         const newColumns = parsedColumns.filter((_, index) => !indicesToRemove.has(index));
-        
-        // 使用传入的 targetTableName (可能是新表名)
         const newHeader = `INSERT INTO ${targetTableName} (${newColumns.join(', ')}) VALUES`;
 
-        // 3. 解析值部分
-        // 格式可能是: (val1, val2), (val3, val4); 或者就一组
-        // 简化处理：假设只有一组值，且以 ( 开头，以 ); 或 ) 结尾
-        // 如果有多组值 VALUES (...), (...) 比较复杂，这里先假设用户提供的是单行单条插入
-        
-        // 去掉末尾的分号
+        // 3. 末尾分号摘除
         let cleanValuesPart = valuesPart;
         let hasSemicolon = false;
         if (cleanValuesPart.endsWith(';')) {
             hasSemicolon = true;
-            cleanValuesPart = cleanValuesPart.slice(0, -1);
+            cleanValuesPart = cleanValuesPart.slice(0, -1).trim();
         }
 
-        // 去掉首尾括号
-        cleanValuesPart = cleanValuesPart.trim();
-        if (cleanValuesPart.startsWith('(') && cleanValuesPart.endsWith(')')) {
-            cleanValuesPart = cleanValuesPart.slice(1, -1);
+        // 4. 支持单组或多组 VALUES：(a,b), (c,d), (e,f)
+        //    用括号深度扫描分割顶级括号块，避免 (1, '(test)') 误切
+        const groups = extractTopLevelGroups(cleanValuesPart);
+        if (groups.length === 0) {
+            throw new Error('未识别到 VALUES 后的括号');
         }
 
-        // 4. 分割值
-        const values = splitSqlValues(cleanValuesPart);
-        
-        if (values.length !== parsedColumns.length) {
-            throw new Error(`列数(${parsedColumns.length})与值数(${values.length})不匹配`);
-        }
+        // 5. 每组分别过滤列
+        const newGroups = groups.map(group => {
+            const values = splitSqlValues(group);
+            if (values.length !== parsedColumns.length) {
+                throw new Error(`列数(${parsedColumns.length})与值数(${values.length})不匹配`);
+            }
+            const filtered = values.filter((_, i) => !indicesToRemove.has(i));
+            return `(${filtered.join(', ')})`;
+        });
 
-        // 5. 过滤值
-        const newValues = values.filter((_, index) => !indicesToRemove.has(index));
-
-        // 6. 组装
-        return `${newHeader} (${newValues.join(', ')})${hasSemicolon ? ';' : ''}`;
+        return `${newHeader} ${newGroups.join(', ')}${hasSemicolon ? ';' : ''}`;
     }
 
     /**
-     * 智能分割 SQL VALUES，处理引号内的逗号
+     * 在 SQL 字符串里查找一个关键字（大小写无关），跳过字符串字面量和标识符引号
+     * 兼容三种方言的引号: ' "  ` 以及 SQL Server / 达梦 的 [identifier]
+     * 字符串内 '' 转义按 SQL 标准识别
+     */
+    function findKeywordOutsideQuotes(sql, keyword) {
+        const upper = keyword.toUpperCase();
+        const len = sql.length;
+        let i = 0;
+        while (i < len) {
+            const c = sql[i];
+            if (c === "'") {
+                i++;
+                while (i < len) {
+                    if (sql[i] === "'") {
+                        if (sql[i + 1] === "'") { i += 2; continue; }
+                        i++; break;
+                    }
+                    i++;
+                }
+                continue;
+            }
+            if (c === '"') {
+                i++;
+                while (i < len && sql[i] !== '"') i++;
+                if (i < len) i++;
+                continue;
+            }
+            if (c === '`') {
+                i++;
+                while (i < len && sql[i] !== '`') i++;
+                if (i < len) i++;
+                continue;
+            }
+            if (c === '[') {
+                i++;
+                while (i < len && sql[i] !== ']') i++;
+                if (i < len) i++;
+                continue;
+            }
+            if (sql.substr(i, keyword.length).toUpperCase() === upper) {
+                const before = i === 0 ? ' ' : sql[i - 1];
+                const after = sql[i + keyword.length] || ' ';
+                if (!/\w/.test(before) && !/\w/.test(after)) return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+
+    /**
+     * 按括号深度从 "(...), (...), (...)" 字符串里提取顶级 () 内容
+     * 处理字符串字面量内的括号、嵌套括号
+     */
+    function extractTopLevelGroups(str) {
+        const groups = [];
+        const len = str.length;
+        let i = 0;
+        while (i < len) {
+            if (str[i] === '(') {
+                let depth = 1;
+                let j = i + 1;
+                while (j < len && depth > 0) {
+                    const cj = str[j];
+                    if (cj === "'") {
+                        j++;
+                        while (j < len) {
+                            if (str[j] === "'") {
+                                if (str[j + 1] === "'") { j += 2; continue; }
+                                j++; break;
+                            }
+                            j++;
+                        }
+                        continue;
+                    }
+                    if (cj === '(') depth++;
+                    else if (cj === ')') depth--;
+                    if (depth === 0) break;
+                    j++;
+                }
+                if (depth !== 0) throw new Error('括号不匹配');
+                groups.push(str.substring(i + 1, j));
+                i = j + 1;
+            } else {
+                i++;
+            }
+        }
+        return groups;
+    }
+
+    /**
+     * 智能分割 SQL VALUES 内容:按顶层逗号切，兼容 SQL Server / 达梦 / MySQL
+     *  - SQL 标准 '' 转义("it''s ok")
+     *  - 反斜杠 \' 转义(MySQL 模式)
+     *  - 嵌套括号(函数 / 子查询)
+     *  - 方括号 / 双引号 / 反引号标识符
      */
     function splitSqlValues(str) {
         const result = [];
         let current = '';
-        let inQuote = false;
-        let quoteChar = '';
-        
-        for (let i = 0; i < str.length; i++) {
-            const char = str[i];
-            
-            if ((char === "'" || char === '"') && (i === 0 || str[i-1] !== '\\')) {
-                if (!inQuote) {
-                    inQuote = true;
-                    quoteChar = char;
-                } else if (char === quoteChar) {
-                    inQuote = false;
+        const len = str.length;
+        let i = 0;
+        let depth = 0;
+        while (i < len) {
+            const ch = str[i];
+
+            if (ch === "'") {
+                current += ch;
+                i++;
+                while (i < len) {
+                    const c2 = str[i];
+                    if (c2 === '\\' && i + 1 < len) {
+                        current += c2 + str[i + 1];
+                        i += 2;
+                        continue;
+                    }
+                    if (c2 === "'") {
+                        if (str[i + 1] === "'") {
+                            current += "''";
+                            i += 2;
+                            continue;
+                        }
+                        current += "'";
+                        i++;
+                        break;
+                    }
+                    current += c2;
+                    i++;
                 }
+                continue;
             }
-            
-            if (char === ',' && !inQuote) {
+
+            if (ch === '"' || ch === '`') {
+                const close = ch;
+                current += ch;
+                i++;
+                while (i < len && str[i] !== close) { current += str[i]; i++; }
+                if (i < len) { current += str[i]; i++; }
+                continue;
+            }
+            if (ch === '[') {
+                current += ch;
+                i++;
+                while (i < len && str[i] !== ']') { current += str[i]; i++; }
+                if (i < len) { current += str[i]; i++; }
+                continue;
+            }
+
+            if (ch === '(') { depth++; current += ch; i++; continue; }
+            if (ch === ')') { depth--; current += ch; i++; continue; }
+
+            if (ch === ',' && depth === 0) {
                 result.push(current.trim());
                 current = '';
-            } else {
-                current += char;
+                i++;
+                continue;
             }
+
+            current += ch;
+            i++;
         }
-        result.push(current.trim());
+        if (current.trim() !== '' || result.length > 0) {
+            result.push(current.trim());
+        }
         return result;
     }
 
@@ -906,12 +1034,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const paramsStr = paramMatch[1].trim();
                     try {
                         const params = parseParams(paramsStr);
-                        let finalSql = currentSql;
-                        
-                        // 依次替换 ?
-                        for (const param of params) {
-                            finalSql = finalSql.replace('?', param);
-                        }
+                        // 用扫描器替换 ? 占位符:跳过字符串字面量内的 ?,
+                        // 且参数本身含 ? 时不会被后续替换误伤
+                        let finalSql = replacePlaceholdersOutsideQuotes(currentSql, params);
                         
                         results.push(ensureSemicolon(finalSql));
                     } catch (e) {
@@ -982,15 +1107,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatParamValue(value, type) {
-        // 根据类型决定是否加引号
-        const numericTypes = ['Integer', 'Long', 'Double', 'Float', 'Short', 'Byte', 'Boolean'];
-        
+        // 数值/布尔不加引号(三种数据库通用)
+        const numericTypes = ['Integer', 'Long', 'Double', 'Float', 'Short', 'Byte', 'Boolean', 'BigDecimal', 'BigInteger', 'Number'];
+
         if (numericTypes.includes(type)) {
             return value;
-        } else {
-            // String, Timestamp, Date, Time 等需要加引号
-            return `'${value}'`;
         }
+        // 字符串/时间/UUID 等加引号,SQL 标准 '' 转义,SQL Server / 达梦 / MySQL 都识别
+        const escaped = String(value).replace(/'/g, "''");
+        return `'${escaped}'`;
+    }
+
+    /**
+     * 把 SQL 里的 ? 占位符依次换成实际参数,跳过字符串字面量内的 ?
+     * 防止参数值里的 ? 被后续 replace 误当占位符
+     */
+    function replacePlaceholdersOutsideQuotes(sql, params) {
+        let out = '';
+        let pi = 0;
+        const len = sql.length;
+        let i = 0;
+        while (i < len) {
+            const c = sql[i];
+            if (c === "'") {
+                out += c; i++;
+                while (i < len) {
+                    if (sql[i] === '\\' && i + 1 < len) { out += sql[i] + sql[i + 1]; i += 2; continue; }
+                    if (sql[i] === "'") {
+                        if (sql[i + 1] === "'") { out += "''"; i += 2; continue; }
+                        out += "'"; i++; break;
+                    }
+                    out += sql[i]; i++;
+                }
+                continue;
+            }
+            if (c === '"' || c === '`') {
+                const close = c;
+                out += c; i++;
+                while (i < len && sql[i] !== close) { out += sql[i]; i++; }
+                if (i < len) { out += sql[i]; i++; }
+                continue;
+            }
+            if (c === '[') {
+                out += c; i++;
+                while (i < len && sql[i] !== ']') { out += sql[i]; i++; }
+                if (i < len) { out += sql[i]; i++; }
+                continue;
+            }
+            if (c === '?') {
+                if (pi < params.length) {
+                    out += params[pi];
+                    pi++;
+                } else {
+                    out += '?';   // 参数不够时保留占位
+                }
+                i++;
+                continue;
+            }
+            out += c;
+            i++;
+        }
+        return out;
     }
 
     // ---------------------------------------------------------
