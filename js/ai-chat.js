@@ -291,25 +291,11 @@
     }
 
     // marked 全局配置：GFM + 换行符识别（中文场景更顺手）
-    // 流式渲染时跳过高亮(避免每 80ms 跑一次 highlightAuto 拖慢流式速度),结束时再渲一次完整高亮
+    // 注意:marked v5+ 已废弃 highlight 选项,代码块语法高亮放在 enhanceCodeBlocks 里
+    // 用 hljs 直接处理 marked 输出的 HTML,流式期间 _skipHighlight=true 跳过高亮
     let _skipHighlight = false;
     if (typeof marked !== 'undefined' && marked.setOptions) {
-        const opts = { gfm: true, breaks: true, pedantic: false };
-        // 接入 highlight.js 做代码块语法高亮（lib/highlight.min.js + atom-one-dark 主题）
-        if (typeof hljs !== 'undefined') {
-            opts.highlight = function(code, lang) {
-                if (_skipHighlight) return code;  // 流式中跳过,流结束时由 finalRender 整体重渲
-                try {
-                    if (lang && hljs.getLanguage(lang)) {
-                        return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
-                    }
-                    return hljs.highlightAuto(code).value;
-                } catch (e) {
-                    return code;
-                }
-            };
-        }
-        marked.setOptions(opts);
+        marked.setOptions({ gfm: true, breaks: true, pedantic: false });
     }
 
     // 中文与 ** / * 紧邻时 CommonMark 不认作加粗（CJK 不算单词边界）
@@ -389,12 +375,38 @@
 
     // 把 marked 输出的 <pre><code class="language-X">...</code></pre>
     // 包装成 OpenAI 风格：上方深色头部（语言名 + 复制按钮），下方代码
-    // 同时给 <code> 加上 'hljs' class，让 atom-one-dark 主题样式生效
+    // 同时直接调用 hljs 给代码内容上色(marked v11 已废弃 highlight 选项,
+    // 必须在 marked 渲染后用 hljs 处理),给 <code> 加 'hljs' class 让主题 CSS 生效
     function enhanceCodeBlocks(html) {
         return html.replace(/<pre><code([^>]*)>([\s\S]*?)<\/code><\/pre>/g, (m, attrs, code) => {
             const langMatch = attrs.match(/language-([\w+\-#.]+)/i);
             const language = langMatch ? langMatch[1] : 'text';
-            // 确保 class 里有 hljs（hljs 主题选择器靠这个）
+
+            // marked 已把代码 escape 成 HTML 实体,hljs 要原文,先反转义
+            let rawCode = code
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;/g, "'")
+                .replace(/&amp;/g, '&');
+
+            // 流式中 _skipHighlight=true 时不上色(纯文本输出更快),force 渲染时上色
+            let highlighted;
+            if (_skipHighlight || typeof hljs === 'undefined') {
+                highlighted = code;  // 用 marked 已 escape 的原版,安全
+            } else {
+                try {
+                    if (langMatch && hljs.getLanguage(language)) {
+                        highlighted = hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
+                    } else {
+                        highlighted = hljs.highlightAuto(rawCode).value;
+                    }
+                } catch (e) {
+                    highlighted = code;  // 出错保底用 marked 原版
+                }
+            }
+
+            // 确保 class 里有 hljs(主题选择器靠这个)
             let newAttrs = attrs;
             if (/class="[^"]*"/.test(newAttrs)) {
                 if (!/\bhljs\b/.test(newAttrs)) {
@@ -410,7 +422,7 @@
                 +     `<svg viewBox="0 0 24 24" width="12" height="12" style="vertical-align:-2px;margin-right:4px"><use xlink:href="#icon-copy"></use></svg>复制`
                 +   `</button>`
                 + `</div>`
-                + `<pre><code${newAttrs}>${code}</code></pre>`
+                + `<pre><code${newAttrs}>${highlighted}</code></pre>`
                 + `</div>`;
         });
     }
@@ -1466,6 +1478,10 @@
     }
 
     function buildExportHtml(s) {
+        // 导出时强制启用高亮(防止流式刚结束 _skipHighlight 没回收的边界情况)
+        const savedSkip = _skipHighlight;
+        _skipHighlight = false;
+        try {
         const msgsHtml = s.messages.map((m, idx) => {
             const isUser = m.role === 'user';
             const cls = isUser ? 'user' : 'assistant';
@@ -1662,6 +1678,9 @@
   </div>
 </body>
 </html>`;
+        } finally {
+            _skipHighlight = savedSkip;
+        }
     }
 
     // ---------------- 事件绑定 ----------------
