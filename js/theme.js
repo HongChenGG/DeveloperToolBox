@@ -126,8 +126,24 @@
         if (!theme) return;
 
         const root = document.documentElement;
-        
-        // 应用CSS变量
+
+        // 先重置所有主题变量为浅色基准值。
+        // 必须做这一步：深色主题额外定义了 --text-primary / --text-secondary，
+        // 而浅色主题不定义它们。如果不重置，从深色切回浅色时
+        // 白色文字变量会残留在 <html> 上，造成「白底白字」看不见。
+        const BASE_VARS = {
+            '--bg-dark': '#F0F8FF',
+            '--bg-darker': '#E6F3FF',
+            '--bg-panel': '#FFFFFF',
+            '--text-primary': '#2D3436',
+            '--text-secondary': '#636E72',
+            '--accent-color': '#00B4D8',
+            '--border-color': '#B8E6F5',
+            '--hover-bg': 'rgba(0, 180, 216, 0.1)'
+        };
+        Object.keys(BASE_VARS).forEach(k => root.style.setProperty(k, BASE_VARS[k]));
+
+        // 再应用主题自己的变量（覆盖上面的基准值）
         Object.keys(theme).forEach(key => {
             if (key.startsWith('--')) {
                 root.style.setProperty(key, theme[key]);

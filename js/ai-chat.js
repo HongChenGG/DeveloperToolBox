@@ -58,8 +58,6 @@
             // 思考深度控制（OpenAI 兼容的 reasoning_effort）
             // 留空 = 不发送该字段；Qwen3.8 默认 xhigh 会过度思考，建议 medium/low
             reasoningEffort: 'medium',
-            // 思考块初始状态：false = 默认折叠，true = 默认展开
-            thinkDefaultOpen: false,
             // 联网搜索（基于 OpenAI function calling，要求模型支持 tools）
             webEnabled: false,
             searchUrlTemplate: ''   // 留空 → 自动使用 DEFAULT_SEARCH_PROXY
@@ -75,6 +73,9 @@
         compressEnabled: false,
         compressThreshold: 20,
         compressKeepLast: 6,
+        // 思考块初始状态：false = 默认折叠，true = 默认展开
+        // 这是显示偏好（全局），不随模型变化，所以放在顶层而不是 profile 里
+        thinkDefaultOpen: false,
         skills: []                  // [{id, name, content, enabled, source, createdAt}]
     };
 
@@ -799,7 +800,7 @@
                 <div class="${bubbleClass}" style="max-width:82%;padding:12px 16px;border-radius:12px;position:relative">
                     <div class="ai-msg-content">${bodyHtml}</div>
                     <div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
-                        <span style="font-size:11px;opacity:.55;margin-right:2px">${isUser ? '我' : '助手'}</span>
+                        <span class="ai-msg-meta-label" style="font-size:11px;opacity:.55;margin-right:2px">${isUser ? '我' : '助手'}</span>
                         <button class="ai-msg-act ai-msg-copy" data-idx="${idx}">📋 复制</button>
                         ${isUser
                             ? `<button class="ai-msg-act ai-msg-edit" data-idx="${idx}" title="编辑后重发，会替换该消息之后的内容">✏️ 编辑</button>`
@@ -1505,6 +1506,8 @@
         document.getElementById('ai-settings-modal').style.display = 'none';
     }
     function saveSettings() {
+        // 记录改动前的显示偏好，用于判断是否需要清掉历史消息的手动折叠状态
+        const oldThinkOpen = !!cfg.thinkDefaultOpen;
         // 先把表单回写到当前正在编辑的模型
         saveFormToProfile();
 
@@ -1518,6 +1521,13 @@
         cfg.compressKeepLast  = $cmpKp ? Math.max(1, parseInt($cmpKp.value) || 6)  : cfg.compressKeepLast;
 
         saveCfg();
+        // 「思考过程显示」改了：清掉历史消息的手动折叠状态，让新设置立刻生效。
+        // 否则用户只要手动点过一次折叠，该消息的 thinkOpen 就会永久覆盖设置。
+        if (oldThinkOpen !== !!cfg.thinkDefaultOpen) {
+            sessions.forEach(s => (s.messages || []).forEach(m => { delete m.thinkOpen; }));
+            saveSessions();
+            renderMessages();
+        }
         updateStatus();
         closeSettings();
         showToast('设置已保存', 'success');
@@ -1541,7 +1551,7 @@
         const $re = document.getElementById('ai-cfg-reasoning-effort');
         if ($re) p.reasoningEffort = $re.value;
         const $to = document.getElementById('ai-cfg-think-open');
-        if ($to) p.thinkDefaultOpen = $to.value === '1';
+        if ($to) cfg.thinkDefaultOpen = $to.value === '1';
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) p.webEnabled = !!$web.checked;
@@ -1572,7 +1582,7 @@
         const $re = document.getElementById('ai-cfg-reasoning-effort');
         if ($re) $re.value = p.reasoningEffort || '';
         const $to = document.getElementById('ai-cfg-think-open');
-        if ($to) $to.value = p.thinkDefaultOpen ? '1' : '0';
+        if ($to) $to.value = cfg.thinkDefaultOpen ? '1' : '0';
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) $web.checked = !!p.webEnabled;

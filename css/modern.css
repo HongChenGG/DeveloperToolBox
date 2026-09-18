@@ -1482,6 +1482,24 @@ body:is([data-theme="dark"], [data-theme="midnight"], [data-theme="cyberpunk"]) 
     border-color: var(--accent-color);
 }
 
+/* 用户气泡是彩色底（--accent-color）+ 白字，按钮必须用白色系，
+   否则 --text-secondary 的深灰文字在彩色底上看不清 */
+.ai-bubble-user .ai-msg-act {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #fff;
+}
+.ai-bubble-user .ai-msg-act:hover {
+    background: rgba(255, 255, 255, 0.34);
+    border-color: rgba(255, 255, 255, 0.7);
+    color: #fff;
+}
+/* 用户气泡里的「我」标签也提亮一点 */
+.ai-bubble-user .ai-msg-meta-label {
+    color: #fff;
+    opacity: .8;
+}
+
 /* max_tokens 截断提示 */
 .ai-truncated-hint {
     margin-top: 8px;
