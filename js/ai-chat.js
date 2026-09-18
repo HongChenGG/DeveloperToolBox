@@ -154,15 +154,52 @@
             return raw ? JSON.parse(raw) : [];
         } catch { return []; }
     }
+    function isQuotaError(e) {
+        return !!(e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22));
+    }
+
     function saveSessions() {
         try {
             localStorage.setItem(LS_SES, JSON.stringify(sessions));
+            return;
         } catch (e) {
-            console.warn('[ai-chat] saveSessions 失败:', e.message);
-            if (typeof showToast === 'function') {
-                showToast('保存会话失败:' + (e.name === 'QuotaExceededError' ? 'localStorage 已满,请删除旧会话' : e.message), 'error');
+            if (!isQuotaError(e)) {
+                console.warn('[ai-chat] saveSessions 失败:', e.message);
+                if (typeof showToast === 'function') showToast('保存会话失败:' + e.message, 'error');
+                return;
             }
         }
+        // 存储满：从最老的消息开始剥离图片（保留文字）后重试，避免整条会话存不进去
+        for (let round = 0; round < 40; round++) {
+            if (stripOldestImages(3) === 0) break;
+            try {
+                localStorage.setItem(LS_SES, JSON.stringify(sessions));
+                if (typeof showToast === 'function') {
+                    showToast('localStorage 已满，已自动清理较早的图片（文字保留）', 'warning');
+                }
+                return;
+            } catch (e2) {
+                if (!isQuotaError(e2)) break;
+            }
+        }
+        if (typeof showToast === 'function') {
+            showToast('保存会话失败：localStorage 已满，请删除旧会话', 'error');
+        }
+    }
+
+    // 从最老的消息开始剥离图片，返回实际剥离数量
+    function stripOldestImages(max) {
+        let n = 0;
+        // sessions 用 unshift 存新会话，所以尾部是最旧的
+        for (let i = sessions.length - 1; i >= 0 && n < max; i--) {
+            const s = sessions[i];
+            if (!s.messages) continue;
+            for (let j = 0; j < s.messages.length && n < max; j++) {
+                const m = s.messages[j];
+                if (m.images && m.images.length) { delete m.images; n++; }
+            }
+        }
+        return n;
     }
 
     function getCurrent() {
@@ -218,7 +255,10 @@
 
         s._compressing = true;
         try {
-            const transcript = slice.map((m, i) => `[${i+1}][${m.role}] ${m.content}`).join('\n\n');
+            const transcript = slice.map((m, i) => {
+                const imgs = (m.images && m.images.length) ? ` [${m.images.length}张图片]` : '';
+                return `[${i+1}][${m.role}] ${m.content || ''}${imgs}`;
+            }).join('\n\n');
             // C: 语言自适应——片段含 CJK 用中文 prompt，否则用英文
             const hasCjk = /[一-龥　-〿＀-￯]/.test(transcript);
             const prevSummary = s.compressed?.summary
@@ -234,19 +274,21 @@
             const url = p.baseUrl.replace(/\/$/, '') + '/chat/completions';
             const headers = { 'Content-Type': 'application/json' };
             if (p.apiKey) headers['Authorization'] = 'Bearer ' + p.apiKey;
-            const resp = await fetch(url, {
-                method: 'POST', headers,
-                body: JSON.stringify({
-                    model: p.model,
-                    messages: [
-                        { role: 'system', content: sysPrompt },
-                        { role: 'user',   content: compressPrompt }
-                    ],
-                    temperature: 0.3,
-                    max_tokens: 800,
-                    stream: false
-                })
+            // 摘要任务不需要思考：显式关掉，避免思考 token 吃掉 max_tokens 导致摘要为空
+            // （部分服务端不认 reasoning_effort，返回 400 时自动回退重试）
+            const mkBody = withEffort => JSON.stringify({
+                model: p.model,
+                messages: [
+                    { role: 'system', content: sysPrompt },
+                    { role: 'user',   content: compressPrompt }
+                ],
+                temperature: 0.3,
+                max_tokens: 800,
+                stream: false,
+                ...(withEffort ? { reasoning_effort: 'none' } : {})
             });
+            let resp = await fetch(url, { method: 'POST', headers, body: mkBody(true) });
+            if (resp.status === 400) resp = await fetch(url, { method: 'POST', headers, body: mkBody(false) });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const data = await resp.json();
             const summary = data?.choices?.[0]?.message?.content?.trim();
@@ -273,8 +315,8 @@
         // 已有 mark 就先撤掉旧的（位置可能变）
         const old = $msgs.querySelector('.ai-compress-mark');
         if (old) old.remove();
-        const bubbles = $msgs.children;                 // 每条消息一个外层 div
-        const anchor = bubbles[upTo];                   // 第 upTo 条之前插入
+        // 用 data-msg-idx 定位（不能直接用 children 下标：压缩分隔条本身也占一个子节点）
+        const anchor = $msgs.querySelector(`[data-msg-idx="${upTo}"]`);
         const mark = document.createElement('div');
         mark.className = 'ai-compress-mark';
         const tip = String(s.compressed.summary).slice(0, 200).replace(/"/g, '&quot;');
@@ -295,15 +337,20 @@
     }
 
     // ---------------- 图片（多模态）支持 ----------------
-    const MAX_IMAGES    = 4;      // 单条消息最多图片数
-    const IMG_MAX_EDGE  = 1280;   // 压缩后最长边（px）
-    const IMG_QUALITY   = 0.85;   // JPEG 质量
+    const MAX_IMAGES    = 4;                    // 单条消息最多图片数
+    const IMG_MAX_EDGE  = 1280;                 // 压缩后最长边（px）
+    const IMG_QUALITY   = 0.85;                 // JPEG 质量
+    const IMG_MAX_BYTES = 20 * 1024 * 1024;     // 单张原图大小上限 20MB（防内存爆）
+    const MAX_IMG_MSGS  = 2;                    // 请求时最多给最近 N 条带图消息保留图片
 
     // 把图片压缩成 data URL：等比缩放到 IMG_MAX_EDGE，转 JPEG，减小 localStorage 占用
     function compressImage(file) {
         return new Promise((resolve, reject) => {
             if (!file || !file.type || !file.type.startsWith('image/')) {
                 reject(new Error('不是图片文件')); return;
+            }
+            if (file.size > IMG_MAX_BYTES) {
+                reject(new Error(`图片过大（${(file.size / 1048576).toFixed(1)}MB，上限 20MB）`)); return;
             }
             const reader = new FileReader();
             reader.onerror = () => reject(new Error('读取文件失败'));
@@ -373,6 +420,40 @@
             return { role: m.role, content: parts };
         }
         return { role: m.role, content: m.content };
+    }
+
+    // 只给最近 MAX_IMG_MSGS 条带图消息保留图片，更早的图片剥离成纯文本。
+    // 原因：历史图片每次请求都会重新编码成 vision token（每张 ~1k+），
+    //       多轮带图对话会瞬间吃光上下文并拖慢推理。
+    function withImageBudget(list) {
+        let budget = MAX_IMG_MSGS;
+        const out = new Array(list.length);
+        for (let i = list.length - 1; i >= 0; i--) {
+            const m = list[i];
+            if (m.images && m.images.length) {
+                if (budget > 0) { budget--; out[i] = toApiMessage(m); }
+                else out[i] = { role: m.role, content: (m.content || '') + '（此消息附带的图片已省略）' };
+            } else {
+                out[i] = toApiMessage(m);
+            }
+        }
+        return out;
+    }
+
+    // 页面内图片查看器（data URL 不能直接顶层导航，会被浏览器拦截）
+    function openImageViewer(src) {
+        if (!src) return;
+        const mask = document.createElement('div');
+        mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+        const img = document.createElement('img');
+        img.src = src;
+        img.style.cssText = 'max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 10px 50px rgba(0,0,0,.6)';
+        mask.appendChild(img);
+        const onKey = ev => { if (ev.key === 'Escape') close(); };
+        const close = () => { mask.remove(); document.removeEventListener('keydown', onKey); };
+        mask.addEventListener('click', close);
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(mask);
     }
 
     // marked 全局配置：GFM + 换行符识别（中文场景更顺手）
@@ -571,9 +652,10 @@
             // 流式开始前的"思考中"动画
             bodyHtml = `<div class="ai-thinking" aria-label="正在思考"><span></span><span></span><span></span></div>`;
         } else if (isUser) {
-            const imgs = (m.images && m.images.length)
+            const safeImgs = (m.images || []).filter(src => typeof src === 'string' && /^data:image\//i.test(src));
+            const imgs = safeImgs.length
                 ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
-                  m.images.map(src => `<a href="${src}" target="_blank" rel="noopener" title="点击查看原图"><img src="${src}" style="max-width:150px;max-height:150px;border-radius:6px;border:1px solid var(--border-color);display:block"></a>`).join('') +
+                  safeImgs.map(src => `<img src="${src}" data-img-view="1" title="点击查看大图" style="max-width:150px;max-height:150px;border-radius:6px;border:1px solid var(--border-color);display:block;cursor:zoom-in">`).join('') +
                   '</div>'
                 : '';
             bodyHtml = imgs + (m.content ? `<div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.content)}</div>` : '');
@@ -581,7 +663,7 @@
             bodyHtml = renderAssistantBody(m);
         }
         return `
-            <div style="display:flex;justify-content:${align};animation:ai-fade-in 0.3s ease">
+            <div data-msg-idx="${idx}" style="display:flex;justify-content:${align};animation:ai-fade-in 0.3s ease">
                 <div class="${bubbleClass}" style="max-width:82%;padding:12px 16px;border-radius:12px;position:relative">
                     <div class="ai-msg-content">${bodyHtml}</div>
                     <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;opacity:.55">
@@ -916,10 +998,10 @@
         if (s.compressed?.summary) {
             msgs.push({ role: 'system', content: '【以下是之前对话的上下文摘要，请在回答时参考】\n' + s.compressed.summary });
             const remain = s.messages.slice(s.compressed.upToIndex);
-            msgs.push(...remain.map(toApiMessage));
+            msgs.push(...withImageBudget(remain));
         } else {
             const history = s.messages.slice(-Math.max(1, p.contextLen));
-            msgs.push(...history.map(toApiMessage));
+            msgs.push(...withImageBudget(history));
         }
 
         // 占位的 assistant 消息（带 loading 标记，渲染时显示思考动画）
@@ -1993,6 +2075,14 @@
             const imgItems = items.filter(it => it.type && it.type.startsWith('image/'));
             if (!imgItems.length) return;
             e.preventDefault();
+            // 剪贴板里同时带文字时，手动插回输入框，避免 preventDefault 把文字吞掉
+            const pastedText = e.clipboardData.getData('text/plain');
+            if (pastedText) {
+                const start = $input.selectionStart ?? $input.value.length;
+                const end   = $input.selectionEnd   ?? $input.value.length;
+                $input.value = $input.value.slice(0, start) + pastedText + $input.value.slice(end);
+                $input.selectionStart = $input.selectionEnd = start + pastedText.length;
+            }
             for (const it of imgItems) {
                 const f = it.getAsFile();
                 if (!f) continue;
@@ -2125,6 +2215,9 @@
 
         // 消息区事件委托：复制/删除消息、复制代码块
         $msgs.addEventListener('click', e => {
+            // 图片查看大图（data URL 无法直接顶层导航，会被浏览器拦截）
+            const imgEl = e.target.closest('[data-img-view]');
+            if (imgEl) { e.preventDefault(); openImageViewer(imgEl.getAttribute('src')); return; }
             // 代码块复制
             const codeBtn = e.target.closest('.ai-code-copy-btn');
             if (codeBtn) {
