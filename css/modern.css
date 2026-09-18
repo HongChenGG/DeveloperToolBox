@@ -1481,6 +1481,21 @@ body:is([data-theme="dark"], [data-theme="midnight"], [data-theme="cyberpunk"]) 
     color: #fff;
     border-color: var(--accent-color);
 }
+
+/* max_tokens 截断提示 */
+.ai-truncated-hint {
+    margin-top: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    background: rgba(255, 170, 0, 0.12);
+    border: 1px solid rgba(255, 170, 0, 0.4);
+    color: #d18b00;
+}
+
+/* KaTeX 行内公式微调（避免行高被撑开） */
+.katex { font-size: 1.05em; }
+.katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; }
 .ai-msg-content blockquote {
     border-left: 3px solid var(--accent-color);
     margin: 8px 0;

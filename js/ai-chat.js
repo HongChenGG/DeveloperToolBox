@@ -50,7 +50,7 @@
             model: '',
             temperature: 0.7,
             topP: 1,
-            maxTokens: 2048,
+            maxTokens: 8192,
             contextLen: 20,
             frequencyPenalty: 0,
             presencePenalty: 0,
@@ -561,6 +561,56 @@
     // Markdown 渲染（用项目已有的 marked.js）
     // 额外处理：<think> 推理块折叠、代码块加 OpenAI 风格头部、CJK 加粗修复
     const THINK_SEP = ' THINK ';
+    // ---------------- 数学公式（KaTeX，本地离线） ----------------
+    const MATH_SEP = '\u0000MATH\u0000';
+
+    function renderMathHtml(tex, display) {
+        if (typeof katex === 'undefined') {
+            return escapeHtml(display ? '$$' + tex + '$$' : '$' + tex + '$');
+        }
+        try {
+            return katex.renderToString(tex, { displayMode: display, throwOnError: false, output: 'html' });
+        } catch (e) {
+            return escapeHtml(display ? '$$' + tex + '$$' : '$' + tex + '$');
+        }
+    }
+
+    // 抽取数学公式：$$ 块级 / $ 行内。先保护代码块，避免代码里的 $ 被误判
+    function extractMath(text) {
+        const blocks = [];
+        const stash = [];
+        let t = text.replace(/```[\s\S]*?```|`[^`\n]+`/g, m => {
+            const i = stash.push(m) - 1;
+            return '\u0000CODE' + i + '\u0000';
+        });
+        // 块级公式 $$...$$
+        t = t.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => {
+            blocks.push({ tex: tex.trim(), display: true });
+            return '\n\n' + MATH_SEP + (blocks.length - 1) + MATH_SEP + '\n\n';
+        });
+        // 行内公式 $...$：$ 后非空白、前非空白，且不与 $$ 冲突
+        t = t.replace(/(^|[^\\$])\$([^\s$][^$\n]{0,200}?[^\s$])\$(?!\$)/g, (m, pre, tex) => {
+            // 含中文的多半不是公式（避免 “$100 和 $200” 这种误判）
+            if (/[\u4e00-\u9fa5]/.test(tex)) return m;
+            // 纯数字（如 $100$）不当公式
+            if (/^\d+(\.\d+)?$/.test(tex)) return m;
+            blocks.push({ tex: tex, display: false });
+            return pre + MATH_SEP + (blocks.length - 1) + MATH_SEP;
+        });
+        // 回填代码块
+        t = t.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => stash[+i]);
+        return { text: t, blocks };
+    }
+
+    function restoreMath(html, blocks) {
+        blocks.forEach((b, i) => {
+            const tag = MATH_SEP + i + MATH_SEP;
+            const rendered = renderMathHtml(b.tex, b.display);
+            html = html.split('<p>' + tag + '</p>').join(rendered).split(tag).join(rendered);
+        });
+        return html;
+    }
+
     function renderMd(text) {
         if (typeof marked === 'undefined') return escapeHtml(text);
         try {
@@ -569,10 +619,15 @@
             // 0) 预处理：中文 + ** 边界修复（CommonMark 不认 CJK 为单词边界）
             text = fixCjkMarkdown(text);
 
+            // 0.5) 抽取数学公式（必须在 marked 之前，否则 _ ^ * 会被当 markdown 语法）
+            const mathTop = extractMath(text);
+            text = mathTop.text;
+
             // 1) 抽取  thinking / <thinking> 等推理块（含流式未闭合的情况），用占位符替换
             const thinkBlocks = [];
             const pushThink = (inner, open) => {
-                const html = parse((inner || '').trim());
+                const sub = extractMath((inner || '').trim());
+                const html = restoreMath(parse(sub.text), sub.blocks);
                 thinkBlocks.push(open
                     ? `<details class="ai-think-block" open><summary>💭 思考中<span class="ai-thinking ai-thinking-inline"><span></span><span></span><span></span></span></summary><div class="ai-think-inner">${html}</div></details>`
                     : `<details class="ai-think-block"><summary>💭 思考过程</summary><div class="ai-think-inner">${html}</div></details>`);
@@ -601,7 +656,10 @@
                 html = html.split(inP).join(block).split(tag).join(block);
             });
 
-            // 4) 增强代码块（加 header + 语言标签 + 复制按钮）
+            // 4) 回填数学公式
+            html = restoreMath(html, mathTop.blocks);
+
+            // 5) 增强代码块（加 header + 语言标签 + 复制按钮）
             return enhanceCodeBlocks(html);
         } catch {
             return escapeHtml(text);
@@ -1191,7 +1249,7 @@
             }
 
             if (p.stream) {
-                await readSSE(resp,
+                const finishReason = await readSSE(resp,
                     // 正式回答
                     chunk => {
                         if (assistantMsg.loading) assistantMsg.loading = false;
@@ -1205,6 +1263,11 @@
                         updateLastAssistant(assistantMsg);
                     }
                 );
+                // 被 max_tokens 截断时标记（思考 token 也算在 max_tokens 内）
+                if (finishReason === 'length') {
+                    assistantMsg.truncated = true;
+                    showToast('输出达到 max_tokens 上限被截断，可在设置里调大「最大输出长度」', 'error');
+                }
                 updateLastAssistant(assistantMsg, true); // 流结束补一次完整渲染
             } else {
                 const data = await resp.json();
@@ -1260,7 +1323,10 @@
                         `<div class="ai-think-inner">${renderMd(reasoning)}</div>` +
                         `</details>`;
         }
-        return thinkHtml + renderMd(content);
+        const truncHint = msg.truncated
+            ? '<div class="ai-truncated-hint">⚠️ 输出达到 max_tokens 上限被截断，可在设置里调大「最大输出长度」</div>'
+            : '';
+        return thinkHtml + renderMd(content) + truncHint;
     }
 
     // G: 流式渲染节流——每 80ms 至多渲一次；结束时主流程会再补渲一次保证完整
@@ -1293,10 +1359,34 @@
     }
 
     // 读取 SSE 流（OpenAI 兼容协议）
+    // 读取 SSE 流。返回 finish_reason（'stop' / 'length' / ...），
+    // 调用方据此判断是否被 max_tokens 截断。
     async function readSSE(resp, onChunk, onReasoning) {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buf = '';
+        let finishReason = '';
+        // 返回 true 表示遇到 [DONE]，应结束
+        const handleLine = line => {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) return false;
+            const payload = trimmed.slice(5).trim();
+            if (payload === '[DONE]') return true;
+            try {
+                const obj = JSON.parse(payload);
+                const choice = obj?.choices?.[0] || {};
+                const d = choice.delta || {};
+                const m = choice.message || {};
+                if (choice.finish_reason) finishReason = choice.finish_reason;
+                const reasoning = d.reasoning ?? d.reasoning_content ?? m.reasoning ?? m.reasoning_content ?? '';
+                const delta = d.content ?? m.content ?? '';
+                if (reasoning && onReasoning) onReasoning(reasoning);
+                if (delta) onChunk(delta);
+            } catch {
+                // 忽略解析失败的行
+            }
+            return false;
+        };
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -1305,23 +1395,12 @@
             const lines = buf.split('\n');
             buf = lines.pop() || ''; // 留最后一段不完整的
             for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith('data:')) continue;
-                const payload = trimmed.slice(5).trim();
-                if (payload === '[DONE]') return;
-                try {
-                    const obj = JSON.parse(payload);
-                    const d = obj?.choices?.[0]?.delta || {};
-                    const m = obj?.choices?.[0]?.message || {};
-                    const reasoning = d.reasoning ?? d.reasoning_content ?? m.reasoning ?? m.reasoning_content ?? '';
-                    const delta = d.content ?? m.content ?? '';
-                    if (reasoning && onReasoning) onReasoning(reasoning);
-                    if (delta) onChunk(delta);
-                } catch {
-                    // 忽略解析失败的行
-                }
+                if (handleLine(line)) return finishReason;
             }
         }
+        // 流结束时 buf 里可能还残留最后一行（旧版直接丢弃了）
+        if (buf.trim()) handleLine(buf);
+        return finishReason;
     }
 
     function stopStreaming() {
@@ -1439,7 +1518,7 @@
         p.model            = document.getElementById('ai-cfg-model').value.trim();
         p.temperature      = parseFloat(document.getElementById('ai-cfg-temperature').value);
         p.topP             = parseFloat(document.getElementById('ai-cfg-top-p').value);
-        p.maxTokens        = parseInt(document.getElementById('ai-cfg-max-tokens').value) || 2048;
+        p.maxTokens        = parseInt(document.getElementById('ai-cfg-max-tokens').value) || 8192;
         p.contextLen       = parseInt(document.getElementById('ai-cfg-context-len').value) || 20;
         p.frequencyPenalty = parseFloat(document.getElementById('ai-cfg-frequency-penalty').value);
         p.presencePenalty  = parseFloat(document.getElementById('ai-cfg-presence-penalty').value);

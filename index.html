@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="css/stars.css">
     <link rel="stylesheet" href="css/modern.css">
     <link rel="stylesheet" href="lib/atom-one-dark.min.css">
+    <link rel="stylesheet" href="lib/katex/katex.min.css">
 </head>
 <body>
     <!-- Three.js 3D 背景画布 -->
@@ -2398,7 +2399,7 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                     <div>
                         <label class="ai-label">最大 Tokens</label>
-                        <input type="number" id="ai-cfg-max-tokens" class="ai-input" value="2048" min="1" max="32768">
+                        <input type="number" id="ai-cfg-max-tokens" class="ai-input" value="8192" min="1" max="32768">
                     </div>
                     <div>
                         <label class="ai-label">上下文消息数</label>
@@ -2676,6 +2677,7 @@
     <script src="lib/diff.min.js"></script>
     <script src="lib/js-yaml.min.js"></script>
     <script src="lib/marked.min.js"></script>
+    <script src="lib/katex/katex.min.js"></script>
     <script src="lib/highlight.min.js"></script>
     <!-- 3D 背景动画 -->
     <script src="js/three-bg.js"></script>
