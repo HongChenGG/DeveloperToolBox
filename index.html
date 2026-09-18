@@ -2398,12 +2398,13 @@
 
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                     <div>
-                        <label class="ai-label">最大 Tokens</label>
-                        <input type="number" id="ai-cfg-max-tokens" class="ai-input" value="8192" min="1" max="32768">
+                        <label class="ai-label">最大输出 Tokens</label>
+                        <input type="number" id="ai-cfg-max-tokens" class="ai-input" value="32768" min="1" max="131072">
+                        <div style="font-size:11px;color:var(--text-secondary)">单次回复生成上限（<b>思考 token 也算在内</b>，太小会导致回答被截断）</div>
                     </div>
                     <div>
                         <label class="ai-label">上下文消息数</label>
-                        <input type="number" id="ai-cfg-context-len" class="ai-input" value="20" min="0" max="200">
+                        <input type="number" id="ai-cfg-context-len" class="ai-input" value="50" min="0" max="500">
                         <div style="font-size:11px;color:var(--text-secondary)">每次带最近 N 条历史（开启下方压缩后由压缩配置接管）</div>
                     </div>
                 </div>

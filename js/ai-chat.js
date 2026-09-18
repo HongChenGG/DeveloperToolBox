@@ -50,8 +50,8 @@
             model: '',
             temperature: 0.7,
             topP: 1,
-            maxTokens: 8192,
-            contextLen: 20,
+            maxTokens: 32768,
+            contextLen: 50,
             frequencyPenalty: 0,
             presencePenalty: 0,
             stream: true,
@@ -124,6 +124,9 @@
             // 迁移：把历史版本写死的"百度模板"还原为空字符串，让内置代理接管
             // 用户主动配置的其他 URL 保留不动
             const LEGACY_DEFAULTS = ['https://www.baidu.com/s?wd={q}'];
+            // 给每个 profile 补齐新版本新增的字段（旧数据没有这些键，
+            // 否则 reasoningEffort 等会缺省成 undefined 而走服务端默认）
+            merged.profiles = merged.profiles.map(p => ({ ...makeDefaultProfile(p.id, p.name), ...p }));
             merged.profiles.forEach(p => {
                 if (LEGACY_DEFAULTS.includes(p.searchUrlTemplate)) p.searchUrlTemplate = '';
             });
@@ -603,16 +606,23 @@
     }
 
     function restoreMath(html, blocks) {
-        blocks.forEach((b, i) => {
-            const tag = MATH_SEP + i + MATH_SEP;
-            const rendered = renderMathHtml(b.tex, b.display);
-            html = html.split('<p>' + tag + '</p>').join(rendered).split(tag).join(rendered);
+        if (!blocks.length) return html;
+        // 先剥掉包裹块级公式的 <p>，再一次性回填
+        // （旧版对每个公式做两次 split/join，公式多时是 O(n*m)）
+        const wrapped = new RegExp('<p>\\s*' + MATH_SEP + '(\\d+)' + MATH_SEP + '\\s*</p>', 'g');
+        html = html.replace(wrapped, (m, i) => MATH_SEP + i + MATH_SEP);
+        const anyTag = new RegExp(MATH_SEP + '(\\d+)' + MATH_SEP, 'g');
+        return html.replace(anyTag, (m, i) => {
+            const b = blocks[+i];
+            return b ? renderMathHtml(b.tex, b.display) : m;
         });
-        return html;
     }
 
     function renderMd(text) {
         if (typeof marked === 'undefined') return escapeHtml(text);
+        // 保存原始文本：下面会把公式/思考块换成占位符，
+        // 一旦渲染抛异常，catch 里必须用原始文本，否则占位符会泄漏到界面
+        const original = text;
         try {
             const parse = t => (typeof marked.parse === 'function' ? marked.parse(t) : marked(t));
 
@@ -662,7 +672,7 @@
             // 5) 增强代码块（加 header + 语言标签 + 复制按钮）
             return enhanceCodeBlocks(html);
         } catch {
-            return escapeHtml(text);
+            return escapeHtml(original);
         }
     }
 
@@ -1271,10 +1281,15 @@
                 updateLastAssistant(assistantMsg, true); // 流结束补一次完整渲染
             } else {
                 const data = await resp.json();
-                const msg = data?.choices?.[0]?.message || {};
+                const choice = data?.choices?.[0] || {};
+                const msg = choice.message || {};
                 assistantMsg.loading = false;
                 assistantMsg.content = msg.content || '';
                 assistantMsg.reasoning = msg.reasoning || msg.reasoning_content || '';
+                if (choice.finish_reason === 'length') {
+                    assistantMsg.truncated = true;
+                    showToast('输出达到 max_tokens 上限被截断，可在设置里调大「最大输出长度」', 'error');
+                }
                 updateLastAssistant(assistantMsg, true);
             }
             s.updatedAt = Date.now();
@@ -1518,8 +1533,8 @@
         p.model            = document.getElementById('ai-cfg-model').value.trim();
         p.temperature      = parseFloat(document.getElementById('ai-cfg-temperature').value);
         p.topP             = parseFloat(document.getElementById('ai-cfg-top-p').value);
-        p.maxTokens        = parseInt(document.getElementById('ai-cfg-max-tokens').value) || 8192;
-        p.contextLen       = parseInt(document.getElementById('ai-cfg-context-len').value) || 20;
+        p.maxTokens        = parseInt(document.getElementById('ai-cfg-max-tokens').value) || 32768;
+        p.contextLen       = parseInt(document.getElementById('ai-cfg-context-len').value) || 50;
         p.frequencyPenalty = parseFloat(document.getElementById('ai-cfg-frequency-penalty').value);
         p.presencePenalty  = parseFloat(document.getElementById('ai-cfg-presence-penalty').value);
         p.stream           = document.getElementById('ai-cfg-stream').checked;
