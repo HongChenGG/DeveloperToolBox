@@ -395,6 +395,14 @@ select {
     background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%) !important;
     box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35) !important;
 }
+/* 中性次要按钮（如「复制对话」）。
+   style.css 里的 .btn-secondary 是浅底 + 深字，但 modern.css 的 .btn 统一设了
+   color: white，两者叠加会变成「白字 + 浅底」而看不清，所以这里用现代渐变覆盖。 */
+.btn-secondary {
+    background: linear-gradient(135deg, #64748b 0%, #475569 100%) !important;
+    box-shadow: 0 4px 14px rgba(100, 116, 139, 0.35) !important;
+    color: #fff !important;
+}
 
 /* 文件上传按钮（label.btn） */
 label.btn {
