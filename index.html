@@ -2422,12 +2422,14 @@
                         <label class="ai-label">思考深度 reasoning_effort</label>
                         <select id="ai-cfg-reasoning-effort" class="ai-input">
                             <option value="">不发送（用服务端默认）</option>
-                            <option value="xhigh">xhigh — 最深（慢）</option>
-                            <option value="high">high</option>
-                            <option value="medium" selected>medium — 平衡（推荐）</option>
+                            <option value="none">none — 关闭思考</option>
                             <option value="low">low — 快速</option>
+                            <option value="medium" selected>medium — 平衡（推荐）</option>
+                            <option value="high">high</option>
+                            <option value="max">max — 最高（Ollama）</option>
+                            <option value="xhigh">xhigh — 极高（仅中转站，Ollama 会报 400）</option>
                         </select>
-                        <div style="font-size:11px;color:var(--text-secondary)">仅对支持思考的模型生效（Qwen3.x / DeepSeek 等）。Qwen3.8 默认 xhigh 会过度思考</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Ollama 支持 none/low/medium/high/<b>max</b>；阿里云等中转站支持 low/medium/xhigh。Qwen3.8 默认 xhigh 会过度思考，agent 场景建议 medium/low</div>
                     </div>
                     <div>
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px">

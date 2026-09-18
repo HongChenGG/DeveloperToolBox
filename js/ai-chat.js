@@ -424,21 +424,26 @@
             // 0) 预处理：中文 + ** 边界修复（CommonMark 不认 CJK 为单词边界）
             text = fixCjkMarkdown(text);
 
-            // 1) 抽取 <think>...</think>（包括流式未闭合的情况），用占位符替换
+            // 1) 抽取  thinking / <thinking> 等推理块（含流式未闭合的情况），用占位符替换
             const thinkBlocks = [];
-            let processed = text.replace(/<think>([\s\S]*?)<\/think>/gi, (m, inner) => {
-                const html = parse(inner.trim() || '');
-                thinkBlocks.push(`<details class="ai-think-block"><summary>💭 思考过程</summary><div class="ai-think-inner">${html}</div></details>`);
+            const pushThink = (inner, open) => {
+                const html = parse((inner || '').trim());
+                thinkBlocks.push(open
+                    ? `<details class="ai-think-block" open><summary>💭 思考中<span class="ai-thinking ai-thinking-inline"><span></span><span></span><span></span></span></summary><div class="ai-think-inner">${html}</div></details>`
+                    : `<details class="ai-think-block"><summary>💭 思考过程</summary><div class="ai-think-inner">${html}</div></details>`);
                 return `\n\n${THINK_SEP}${thinkBlocks.length - 1}${THINK_SEP}\n\n`;
-            });
-            // 流式未闭合：最后一个 <think> 没有匹配的 </think>
-            const lastOpen = processed.toLowerCase().lastIndexOf('<think>');
-            if (lastOpen !== -1 && processed.toLowerCase().indexOf('</think>', lastOpen) === -1) {
-                const before = processed.slice(0, lastOpen);
-                const inner = processed.slice(lastOpen + 7);
-                const html = parse(inner);
-                thinkBlocks.push(`<details class="ai-think-block" open><summary>💭 思考中<span class="ai-thinking ai-thinking-inline"><span></span><span></span><span></span></span></summary><div class="ai-think-inner">${html}</div></details>`);
-                processed = before + `\n\n${THINK_SEP}${thinkBlocks.length - 1}${THINK_SEP}\n\n`;
+            };
+            let processed = text.replace(/<(think|thinking)>([\s\S]*?)<\/\1>/gi, (m, tag, inner) => pushThink(inner, false));
+            // 流式未闭合：找最后一个没有对应闭合标签的开标签
+            const openRe = /<(think|thinking)>/gi;
+            let mo, lastOpen = null;
+            while ((mo = openRe.exec(processed)) !== null) {
+                if (processed.toLowerCase().indexOf(`</${mo[1].toLowerCase()}>`, mo.index) === -1) lastOpen = mo;
+            }
+            if (lastOpen) {
+                const before = processed.slice(0, lastOpen.index);
+                const inner = processed.slice(lastOpen.index + lastOpen[0].length);
+                processed = before + pushThink(inner, true);
             }
 
             // 2) marked 渲染主体
@@ -562,7 +567,7 @@
         const bubbleClass = isUser ? 'ai-bubble-user' : 'ai-bubble-assistant';
         const align = isUser ? 'flex-end' : 'flex-start';
         let bodyHtml;
-        if (m.loading && !m.content) {
+        if (m.loading && !m.content && !m.reasoning) {
             // 流式开始前的"思考中"动画
             bodyHtml = `<div class="ai-thinking" aria-label="正在思考"><span></span><span></span><span></span></div>`;
         } else if (isUser) {
@@ -573,7 +578,7 @@
                 : '';
             bodyHtml = imgs + (m.content ? `<div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.content)}</div>` : '');
         } else {
-            bodyHtml = renderMd(m.content || '');
+            bodyHtml = renderAssistantBody(m);
         }
         return `
             <div style="display:flex;justify-content:${align};animation:ai-fade-in 0.3s ease">
@@ -831,7 +836,7 @@
                     return `🔧 ${c.function?.name}`;
                 }).join('\n');
                 assistantMsg.content = (assistantMsg.content ? assistantMsg.content + '\n\n' : '') + `*[联网中…]\n${tip}*`;
-                updateLastAssistant(assistantMsg.content, true);
+                updateLastAssistant(assistantMsg, true);
 
                 // 把模型的 assistant message（带 tool_calls）原样塞进去
                 allMsgs.push({ role: 'assistant', content: m.content || '', tool_calls: toolCalls });
@@ -853,12 +858,12 @@
                 assistantMsg.content = finalText;
             }
             assistantMsg.loading = false;
-            updateLastAssistant(assistantMsg.content, true);
+            updateLastAssistant(assistantMsg, true);
             return;
         }
         // 达到上限
         assistantMsg.content += '\n\n*[联网轮数已达上限，停止]*';
-        updateLastAssistant(assistantMsg.content, true);
+        updateLastAssistant(assistantMsg, true);
     }
 
     // ---------------- 流式聊天 ----------------
@@ -974,35 +979,28 @@
             }
 
             if (p.stream) {
-                let thinkOpen = false;
-                const emit = txt => {
-                    if (assistantMsg.loading) assistantMsg.loading = false;
-                    assistantMsg.content += txt;
-                    updateLastAssistant(assistantMsg.content);   // throttle 渲染
-                };
                 await readSSE(resp,
-                    // 正文
+                    // 正式回答
                     chunk => {
-                        if (thinkOpen) { emit('\n\n\n'); thinkOpen = false; }  // 关闭思考块
-                        emit(chunk);
+                        if (assistantMsg.loading) assistantMsg.loading = false;
+                        assistantMsg.content += chunk;
+                        updateLastAssistant(assistantMsg);   // throttle 渲染
                     },
-                    // 思考（ollama /v1 放在 reasoning，vLLM 放在 reasoning_content）
+                    // 思考过程（ollama /v1 放在 reasoning，vLLM 放在 reasoning_content）
                     reasoning => {
-                        if (!thinkOpen) { emit(' thinking\n'); thinkOpen = true; }
-                        emit(reasoning);
+                        if (assistantMsg.loading) assistantMsg.loading = false;
+                        assistantMsg.reasoning = (assistantMsg.reasoning || '') + reasoning;
+                        updateLastAssistant(assistantMsg);
                     }
                 );
-                if (thinkOpen) assistantMsg.content += '\n\n';  // 思考未闭合时补上
-                updateLastAssistant(assistantMsg.content, true); // 流结束补一次完整渲染
+                updateLastAssistant(assistantMsg, true); // 流结束补一次完整渲染
             } else {
                 const data = await resp.json();
                 const msg = data?.choices?.[0]?.message || {};
-                const reasoning = msg.reasoning || msg.reasoning_content || '';
-                let content = msg.content || '';
-                if (reasoning) content = ' thinking\n' + reasoning + '\n\n\n' + content;
                 assistantMsg.loading = false;
-                assistantMsg.content = content;
-                updateLastAssistant(content, true);
+                assistantMsg.content = msg.content || '';
+                assistantMsg.reasoning = msg.reasoning || msg.reasoning_content || '';
+                updateLastAssistant(assistantMsg, true);
             }
             s.updatedAt = Date.now();
             saveSessions();
@@ -1013,7 +1011,7 @@
                 assistantMsg.content = `**❌ 请求失败**\n\n\`\`\`\n${e.message}\n\`\`\`\n\n排查建议：\n- 检查 API Base URL 是否正确（要带 \`/v1\`）\n- 检查 API Key（中转站需要，Ollama 不需要）\n- Ollama 本地：确认已设置 \`OLLAMA_ORIGINS=*\` 后重启 ollama\n- 网络/CORS：F12 控制台看具体报错`;
                 showToast('请求失败：' + e.message, 'error');
             }
-            updateLastAssistant(assistantMsg.content, true);
+            updateLastAssistant(assistantMsg, true);
             saveSessions();
         } finally {
             isStreaming = false;
@@ -1026,9 +1024,28 @@
         compressOldMessages(s);
     }
 
+    // 助手消息正文：思考块（可折叠，像 pi / HAPI）+ 正式回答
+    function renderAssistantBody(msg) {
+        const content = msg.content || '';
+        const reasoning = msg.reasoning || '';
+        // 正在思考（还没出正文）时展开并显示三点动画
+        const isThinking = msg.loading && !content;
+        let thinkHtml = '';
+        if (reasoning) {
+            const summary = isThinking
+                ? '💭 思考中<span class="ai-thinking ai-thinking-inline"><span></span><span></span><span></span></span>'
+                : '💭 思考过程';
+            thinkHtml = `<details class="ai-think-block"${isThinking ? ' open' : ''}>` +
+                        `<summary>${summary}</summary>` +
+                        `<div class="ai-think-inner">${renderMd(reasoning)}</div>` +
+                        `</details>`;
+        }
+        return thinkHtml + renderMd(content);
+    }
+
     // G: 流式渲染节流——每 80ms 至多渲一次；结束时主流程会再补渲一次保证完整
     let _lastRender = 0;
-    function updateLastAssistant(content, force) {
+    function updateLastAssistant(msg, force) {
         const s = getCurrent();
         if (!s) return;
         if (!force) {
@@ -1043,7 +1060,7 @@
         const bubbles = $msgs.querySelectorAll('.ai-bubble-assistant .ai-msg-content');
         const last = bubbles[bubbles.length - 1];
         if (last) {
-            last.innerHTML = renderMd(content);
+            last.innerHTML = (typeof msg === 'string') ? renderMd(msg) : renderAssistantBody(msg);
         } else {
             renderMessages();
         }
