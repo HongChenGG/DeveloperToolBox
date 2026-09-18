@@ -55,6 +55,9 @@
             frequencyPenalty: 0,
             presencePenalty: 0,
             stream: true,
+            // 思考深度控制（OpenAI 兼容的 reasoning_effort）
+            // 留空 = 不发送该字段；Qwen3.8 默认 xhigh 会过度思考，建议 medium/low
+            reasoningEffort: 'medium',
             // 联网搜索（基于 OpenAI function calling，要求模型支持 tools）
             webEnabled: false,
             searchUrlTemplate: ''   // 留空 → 自动使用 DEFAULT_SEARCH_PROXY
@@ -81,6 +84,7 @@
     let isStreaming = false;
     let userNearBottom = true; // 智能滚动：用户是否在底部附近
     let _editingProfileId = null;  // 设置弹窗当前正在编辑哪个模型
+    let pendingImages = [];        // 待发送的图片（data URL 数组）
 
     // ---------------- 持久化 ----------------
     function loadCfg() {
@@ -290,6 +294,87 @@
         }[c]));
     }
 
+    // ---------------- 图片（多模态）支持 ----------------
+    const MAX_IMAGES    = 4;      // 单条消息最多图片数
+    const IMG_MAX_EDGE  = 1280;   // 压缩后最长边（px）
+    const IMG_QUALITY   = 0.85;   // JPEG 质量
+
+    // 把图片压缩成 data URL：等比缩放到 IMG_MAX_EDGE，转 JPEG，减小 localStorage 占用
+    function compressImage(file) {
+        return new Promise((resolve, reject) => {
+            if (!file || !file.type || !file.type.startsWith('image/')) {
+                reject(new Error('不是图片文件')); return;
+            }
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('读取文件失败'));
+            reader.onload = () => {
+                const img = new Image();
+                img.onerror = () => reject(new Error('图片解码失败'));
+                img.onload = () => {
+                    try {
+                        let w = img.naturalWidth || img.width;
+                        let h = img.naturalHeight || img.height;
+                        const scale = Math.min(1, IMG_MAX_EDGE / Math.max(w, h));
+                        w = Math.max(1, Math.round(w * scale));
+                        h = Math.max(1, Math.round(h * scale));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#fff';           // JPEG 不支持透明，铺白底
+                        ctx.fillRect(0, 0, w, h);
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/jpeg', IMG_QUALITY));
+                    } catch (e) { reject(e); }
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function addPendingImage(dataUrl) {
+        if (pendingImages.length >= MAX_IMAGES) {
+            showToast(`最多 ${MAX_IMAGES} 张图片`, 'warning');
+            return;
+        }
+        pendingImages.push(dataUrl);
+        renderPendingImages();
+    }
+
+    function removePendingImage(idx) {
+        if (idx < 0 || idx >= pendingImages.length) return;
+        pendingImages.splice(idx, 1);
+        renderPendingImages();
+    }
+
+    function renderPendingImages() {
+        const box = document.getElementById('ai-image-preview');
+        if (!box) return;
+        if (!pendingImages.length) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+            return;
+        }
+        box.style.display = 'flex';
+        box.innerHTML = pendingImages.map((src, i) =>
+            `<div style="position:relative">
+                <img src="${src}" title="点击 × 移除" style="height:56px;width:56px;object-fit:cover;border-radius:6px;border:1px solid var(--border-color)">
+                <button data-img-del="${i}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:none;background:#e53e3e;color:#fff;font-size:12px;line-height:16px;cursor:pointer;padding:0">×</button>
+             </div>`
+        ).join('');
+    }
+
+    // 本地消息 → OpenAI 请求格式；带图片时用多模态数组
+    function toApiMessage(m) {
+        if (m.images && m.images.length) {
+            const parts = [];
+            if (m.content) parts.push({ type: 'text', text: m.content });
+            for (const url of m.images) parts.push({ type: 'image_url', image_url: { url } });
+            return { role: m.role, content: parts };
+        }
+        return { role: m.role, content: m.content };
+    }
+
     // marked 全局配置：GFM + 换行符识别（中文场景更顺手）
     // 注意:marked v5+ 已废弃 highlight 选项,代码块语法高亮放在 enhanceCodeBlocks 里
     // 用 hljs 直接处理 marked 输出的 HTML,流式期间 _skipHighlight=true 跳过高亮
@@ -481,7 +566,12 @@
             // 流式开始前的"思考中"动画
             bodyHtml = `<div class="ai-thinking" aria-label="正在思考"><span></span><span></span><span></span></div>`;
         } else if (isUser) {
-            bodyHtml = `<div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.content)}</div>`;
+            const imgs = (m.images && m.images.length)
+                ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">' +
+                  m.images.map(src => `<a href="${src}" target="_blank" rel="noopener" title="点击查看原图"><img src="${src}" style="max-width:150px;max-height:150px;border-radius:6px;border:1px solid var(--border-color);display:block"></a>`).join('') +
+                  '</div>'
+                : '';
+            bodyHtml = imgs + (m.content ? `<div style="white-space:pre-wrap;word-break:break-word">${escapeHtml(m.content)}</div>` : '');
         } else {
             bodyHtml = renderMd(m.content || '');
         }
@@ -772,7 +862,7 @@
     }
 
     // ---------------- 流式聊天 ----------------
-    async function sendMessage(userText) {
+    async function sendMessage(userText, images) {
         const p = getProfile();
         if (!p.baseUrl) {
             showToast(`模型「${p.name}」未配置 API 地址，请先打开设置`, 'warning');
@@ -793,7 +883,8 @@
         let s = getCurrent();
         if (!s) s = createSession();
 
-        s.messages.push({ role: 'user', content: userText, ts: Date.now() });
+        const imgs = (images || []).slice(0, MAX_IMAGES);
+        s.messages.push({ role: 'user', content: userText, images: imgs.length ? imgs : undefined, ts: Date.now() });
         // 自动取首条用户消息作为会话标题
         if (s.title === '新对话' && userText.trim()) {
             s.title = userText.trim().slice(0, 24);
@@ -820,10 +911,10 @@
         if (s.compressed?.summary) {
             msgs.push({ role: 'system', content: '【以下是之前对话的上下文摘要，请在回答时参考】\n' + s.compressed.summary });
             const remain = s.messages.slice(s.compressed.upToIndex);
-            msgs.push(...remain.map(m => ({ role: m.role, content: m.content })));
+            msgs.push(...remain.map(toApiMessage));
         } else {
             const history = s.messages.slice(-Math.max(1, p.contextLen));
-            msgs.push(...history.map(m => ({ role: m.role, content: m.content })));
+            msgs.push(...history.map(toApiMessage));
         }
 
         // 占位的 assistant 消息（带 loading 标记，渲染时显示思考动画）
@@ -847,6 +938,8 @@
             presence_penalty: Number(p.presencePenalty),
             stream: !!p.stream
         };
+        // 思考深度：仅当用户配置了才发送（空字符串 = 用服务端默认）
+        if (p.reasoningEffort) body.reasoning_effort = p.reasoningEffort;
 
         abortCtrl = new AbortController();
         isStreaming = true;
@@ -881,15 +974,32 @@
             }
 
             if (p.stream) {
-                await readSSE(resp, chunk => {
+                let thinkOpen = false;
+                const emit = txt => {
                     if (assistantMsg.loading) assistantMsg.loading = false;
-                    assistantMsg.content += chunk;
+                    assistantMsg.content += txt;
                     updateLastAssistant(assistantMsg.content);   // throttle 渲染
-                });
+                };
+                await readSSE(resp,
+                    // 正文
+                    chunk => {
+                        if (thinkOpen) { emit('\n\n\n'); thinkOpen = false; }  // 关闭思考块
+                        emit(chunk);
+                    },
+                    // 思考（ollama /v1 放在 reasoning，vLLM 放在 reasoning_content）
+                    reasoning => {
+                        if (!thinkOpen) { emit(' thinking\n'); thinkOpen = true; }
+                        emit(reasoning);
+                    }
+                );
+                if (thinkOpen) assistantMsg.content += '\n\n';  // 思考未闭合时补上
                 updateLastAssistant(assistantMsg.content, true); // 流结束补一次完整渲染
             } else {
                 const data = await resp.json();
-                const content = data?.choices?.[0]?.message?.content || '';
+                const msg = data?.choices?.[0]?.message || {};
+                const reasoning = msg.reasoning || msg.reasoning_content || '';
+                let content = msg.content || '';
+                if (reasoning) content = ' thinking\n' + reasoning + '\n\n\n' + content;
                 assistantMsg.loading = false;
                 assistantMsg.content = content;
                 updateLastAssistant(content, true);
@@ -941,7 +1051,7 @@
     }
 
     // 读取 SSE 流（OpenAI 兼容协议）
-    async function readSSE(resp, onChunk) {
+    async function readSSE(resp, onChunk, onReasoning) {
         const reader = resp.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buf = '';
@@ -959,9 +1069,11 @@
                 if (payload === '[DONE]') return;
                 try {
                     const obj = JSON.parse(payload);
-                    const delta = obj?.choices?.[0]?.delta?.content
-                               ?? obj?.choices?.[0]?.message?.content
-                               ?? '';
+                    const d = obj?.choices?.[0]?.delta || {};
+                    const m = obj?.choices?.[0]?.message || {};
+                    const reasoning = d.reasoning ?? d.reasoning_content ?? m.reasoning ?? m.reasoning_content ?? '';
+                    const delta = d.content ?? m.content ?? '';
+                    if (reasoning && onReasoning) onReasoning(reasoning);
                     if (delta) onChunk(delta);
                 } catch {
                     // 忽略解析失败的行
@@ -1090,6 +1202,8 @@
         p.frequencyPenalty = parseFloat(document.getElementById('ai-cfg-frequency-penalty').value);
         p.presencePenalty  = parseFloat(document.getElementById('ai-cfg-presence-penalty').value);
         p.stream           = document.getElementById('ai-cfg-stream').checked;
+        const $re = document.getElementById('ai-cfg-reasoning-effort');
+        if ($re) p.reasoningEffort = $re.value;
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) p.webEnabled = !!$web.checked;
@@ -1117,6 +1231,8 @@
         document.getElementById('ai-cfg-presence-penalty').value  = p.presencePenalty;
         document.getElementById('ai-cfg-pp-val').textContent      = p.presencePenalty;
         document.getElementById('ai-cfg-stream').checked          = p.stream;
+        const $re = document.getElementById('ai-cfg-reasoning-effort');
+        if ($re) $re.value = p.reasoningEffort || '';
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) $web.checked = !!p.webEnabled;
@@ -1821,15 +1937,52 @@
         // 发送 & 停止
         $btnSend.addEventListener('click', () => {
             const text = $input.value.trim();
-            if (!text) return;
+            if (!text && !pendingImages.length) return;   // 允许只发图片
             if (isStreaming) {
                 showToast('上一条还在生成中，请等待或点 ⏹ 停止', 'warning');
                 return;
             }
             $input.value = '';
-            sendMessage(text);
+            const imgs = pendingImages.slice();
+            pendingImages = [];
+            renderPendingImages();
+            sendMessage(text, imgs);
         });
         $btnStop.addEventListener('click', stopStreaming);
+
+        // 图片：按钮 / 选择 / 删除 / 粘贴
+        const $btnImg  = document.getElementById('ai-btn-image');
+        const $fileImg = document.getElementById('ai-image-file');
+        if ($btnImg && $fileImg) {
+            $btnImg.addEventListener('click', () => $fileImg.click());
+            $fileImg.addEventListener('change', async () => {
+                for (const f of Array.from($fileImg.files || [])) {
+                    try { addPendingImage(await compressImage(f)); }
+                    catch (err) { showToast('图片处理失败：' + err.message, 'error'); }
+                }
+                $fileImg.value = '';
+            });
+        }
+        const $imgPrev = document.getElementById('ai-image-preview');
+        if ($imgPrev) {
+            $imgPrev.addEventListener('click', e => {
+                const btn = e.target.closest('[data-img-del]');
+                if (btn) removePendingImage(parseInt(btn.getAttribute('data-img-del'), 10));
+            });
+        }
+        // 粘贴图片（Ctrl+V 直接贴截图）
+        $input.addEventListener('paste', async e => {
+            const items = Array.from(e.clipboardData?.items || []);
+            const imgItems = items.filter(it => it.type && it.type.startsWith('image/'));
+            if (!imgItems.length) return;
+            e.preventDefault();
+            for (const it of imgItems) {
+                const f = it.getAsFile();
+                if (!f) continue;
+                try { addPendingImage(await compressImage(f)); }
+                catch (err) { showToast('粘贴图片失败：' + err.message, 'error'); }
+            }
+        });
         $input.addEventListener('keydown', e => {
             // IME 候选状态时回车应该是"确认上屏",不能触发发送
             // - e.isComposing: 标准 IME 标志(Mac 中文/日文/韩文输入法都会设)
