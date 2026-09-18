@@ -1277,6 +1277,11 @@
         }
         // 流式中:跳过高亮以加速;force=true 时(流结束/非流式)正常高亮
         _skipHighlight = !force;
+        // 用户正在选中文本时不重渲染，避免把选择/复制打断
+        if (!force) {
+            const sel = window.getSelection && window.getSelection();
+            if (sel && String(sel).length > 0) return;
+        }
         const bubbles = $msgs.querySelectorAll('.ai-bubble-assistant .ai-msg-content');
         const last = bubbles[bubbles.length - 1];
         if (last) {
@@ -2437,26 +2442,31 @@
             if (s && s.messages[idx]) s.messages[idx].thinkOpen = d.open;
         }, true);
 
+        // 代码块复制：用 mousedown 而非 click。
+        // 原因：流式渲染每 80ms 会重写整条消息的 innerHTML，mousedown 和 mouseup
+        // 之间 DOM 被替换时，浏览器不会合成 click（两个事件 target 不同），导致点了没反应。
+        $msgs.addEventListener('mousedown', e => {
+            const codeBtn = e.target.closest('.ai-code-copy-btn');
+            if (!codeBtn) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const block = codeBtn.closest('.ai-code-block');
+            const codeEl = block && block.querySelector('pre code');
+            if (!codeEl) return;
+            copyText(codeEl.textContent || '');
+            const orig = codeBtn.innerHTML;
+            codeBtn.innerHTML = '✓ 已复制';
+            codeBtn.classList.add('copied');
+            setTimeout(() => { codeBtn.innerHTML = orig; codeBtn.classList.remove('copied'); }, 1500);
+        });
+
         // 消息区事件委托：复制/删除消息、复制代码块
         $msgs.addEventListener('click', e => {
             // 图片查看大图（data URL 无法直接顶层导航，会被浏览器拦截）
             const imgEl = e.target.closest('[data-img-view]');
             if (imgEl) { e.preventDefault(); openImageViewer(imgEl.getAttribute('src')); return; }
-            // 代码块复制
-            const codeBtn = e.target.closest('.ai-code-copy-btn');
-            if (codeBtn) {
-                e.stopPropagation();
-                const block = codeBtn.closest('.ai-code-block');
-                const codeEl = block?.querySelector('pre code');
-                if (codeEl) {
-                    copyText(codeEl.innerText);
-                    const orig = codeBtn.innerHTML;
-                    codeBtn.innerHTML = '✓ 已复制';
-                    codeBtn.classList.add('copied');
-                    setTimeout(() => { codeBtn.innerHTML = orig; codeBtn.classList.remove('copied'); }, 1500);
-                }
-                return;
-            }
+            // 代码块复制已在 mousedown 阶段处理（见上方）
+            if (e.target.closest('.ai-code-copy-btn')) return;
             // 编辑用户消息
             const editBtn = e.target.closest('.ai-msg-edit');
             if (editBtn) {
