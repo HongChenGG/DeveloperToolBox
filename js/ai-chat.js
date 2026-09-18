@@ -959,6 +959,8 @@
                 tool_choice: 'auto',
                 stream: false
             };
+            // 联网模式同样要遵守用户的思考深度设置，否则每轮工具调用都默认深度思考
+            if (p.reasoningEffort) body.reasoning_effort = p.reasoningEffort;
             const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: abortCtrl.signal });
             if (!resp.ok) {
                 let t = ''; try { t = await resp.text(); } catch {}
@@ -1000,6 +1002,7 @@
             } else {
                 assistantMsg.content = finalText;
             }
+            assistantMsg.reasoning = m.reasoning || m.reasoning_content || '';
             assistantMsg.loading = false;
             updateLastAssistant(assistantMsg, true);
             return;
@@ -1773,7 +1776,19 @@
             const cls = isUser ? 'user' : 'assistant';
             const role = isUser ? '我' : 'AI 助手';
             const avatar = isUser ? '我' : 'AI';
-            const body = isUser ? `<div class="text">${escapeHtml(m.content)}</div>` : renderMd(m.content);
+            let body;
+            if (isUser) {
+                const safeImgs = (m.images || []).filter(src => typeof src === 'string' && /^data:image\//i.test(src));
+                const imgs = safeImgs.length
+                    ? '<div class="imgs">' + safeImgs.map(src => `<img src="${src}" alt="图片">`).join('') + '</div>'
+                    : '';
+                body = imgs + (m.content ? `<div class="text">${escapeHtml(m.content)}</div>` : '');
+            } else {
+                const think = m.reasoning
+                    ? `<details class="think"><summary>💭 思考过程</summary><div class="think-inner">${renderMd(m.reasoning)}</div></details>`
+                    : '';
+                body = think + renderMd(m.content || '');
+            }
             const time = m.ts ? new Date(m.ts).toLocaleString('zh-CN') : '';
             return `
             <div class="msg ${cls}">
@@ -1868,6 +1883,11 @@
   .body > *:first-child { margin-top: 0; }
   .body > *:last-child { margin-bottom: 0; }
   .text { white-space: pre-wrap; word-break: break-word; }
+  .imgs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .imgs img { max-width: 240px; max-height: 240px; border-radius: 8px; border: 1px solid var(--border); }
+  .think { background: #f9fafb; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 8px 0; }
+  .think summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  .think-inner { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); font-size: 13px; color: var(--muted); }
 
   .body h1, .body h2, .body h3, .body h4 {
     margin: 18px 0 10px; font-weight: 600; line-height: 1.4;
