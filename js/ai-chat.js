@@ -85,6 +85,7 @@
     let userNearBottom = true; // 智能滚动：用户是否在底部附近
     let _editingProfileId = null;  // 设置弹窗当前正在编辑哪个模型
     let pendingImages = [];        // 待发送的图片（data URL 数组）
+    let _editingMsgIdx = null;     // 正在编辑哪条用户消息（null = 普通发送）
 
     // ---------------- 持久化 ----------------
     function loadCfg() {
@@ -398,7 +399,7 @@
     }
 
     // ---------------- 图片（多模态）支持 ----------------
-    const MAX_IMAGES    = 4;                    // 单条消息最多图片数
+    const MAX_IMAGES    = 8;                    // 单条消息最多图片数
     const IMG_MAX_EDGE  = 1280;                 // 压缩后最长边（px）
     const IMG_QUALITY   = 0.85;                 // JPEG 质量
     const IMG_MAX_BYTES = 20 * 1024 * 1024;     // 单张原图大小上限 20MB（防内存爆）
@@ -727,9 +728,12 @@
             <div data-msg-idx="${idx}" style="display:flex;justify-content:${align};animation:ai-fade-in 0.3s ease">
                 <div class="${bubbleClass}" style="max-width:82%;padding:12px 16px;border-radius:12px;position:relative">
                     <div class="ai-msg-content">${bodyHtml}</div>
-                    <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;opacity:.55">
+                    <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;opacity:.55;flex-wrap:wrap">
                         <span>${isUser ? '我' : '助手'}</span>
                         <button class="ai-msg-copy" data-idx="${idx}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">📋 复制</button>
+                        ${isUser
+                            ? `<button class="ai-msg-edit" data-idx="${idx}" title="编辑后重发，会替换该消息之后的内容" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">✏️ 编辑</button>`
+                            : `<button class="ai-msg-regen" data-idx="${idx}" title="重新生成（会丢弃这条之后的回复）" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">🔄 重新生成</button>`}
                         <button class="ai-msg-del" data-idx="${idx}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">🗑️ 删除</button>
                     </div>
                 </div>
@@ -1012,6 +1016,51 @@
         updateLastAssistant(assistantMsg, true);
     }
 
+    // ---------------- 消息操作：重新生成 / 编辑重发 ----------------
+    // 从指定助手消息处重新生成：丢弃该轮之后的所有内容，用同一条用户提问重发
+    async function regenerateAt(idx) {
+        const s = getCurrent();
+        if (!s) return;
+        if (isStreaming) { showToast('正在生成中，请先点 ⏹ 停止', 'warning'); return; }
+        let userIdx = -1;
+        for (let i = Math.min(idx, s.messages.length) - 1; i >= 0; i--) {
+            if (s.messages[i].role === 'user') { userIdx = i; break; }
+        }
+        if (userIdx < 0) { showToast('找不到对应的提问', 'warning'); return; }
+        const userMsg = s.messages[userIdx];
+        s.messages.splice(userIdx, s.messages.length - userIdx);
+        s.updatedAt = Date.now();
+        saveSessions();
+        renderMessages();
+        await sendMessage(userMsg.content, userMsg.images);
+    }
+
+    // 编辑模式提示条：让用户知道当前在编辑哪条、可随时取消
+    function renderEditHint() {
+        const box = document.getElementById('ai-edit-hint');
+        if (!box) return;
+        if (_editingMsgIdx === null) { box.style.display = 'none'; box.innerHTML = ''; return; }
+        box.style.display = 'flex';
+        box.innerHTML = `<span>✏️ 正在编辑第 ${_editingMsgIdx + 1} 条消息，发送后会替换其后的内容</span>` +
+            `<button id="ai-edit-cancel" style="background:none;border:none;color:var(--accent-color);cursor:pointer;font-size:11px;padding:0;text-decoration:underline">取消编辑</button>`;
+    }
+
+    // 编辑用户消息：回填到输入框（含图片），发送时替换该消息之后的所有内容
+    function startEditMessage(idx) {
+        const s = getCurrent();
+        const m = s && s.messages[idx];
+        if (!m || m.role !== 'user') return;
+        if (isStreaming) { showToast('正在生成中，请先点 ⏹ 停止', 'warning'); return; }
+        $input.value = m.content || '';
+        pendingImages = (m.images || []).slice();
+        renderPendingImages();
+        _editingMsgIdx = idx;
+        renderEditHint();
+        $input.focus();
+        $input.setSelectionRange($input.value.length, $input.value.length);
+        showToast('编辑后点发送，该消息之后的内容会被替换', 'info');
+    }
+
     // ---------------- 流式聊天 ----------------
     async function sendMessage(userText, images) {
         const p = getProfile();
@@ -1033,6 +1082,13 @@
         }
         let s = getCurrent();
         if (!s) s = createSession();
+
+        // 编辑模式：先丢弃被编辑消息及其之后的所有内容，再作为新消息发出
+        if (_editingMsgIdx !== null && _editingMsgIdx >= 0 && _editingMsgIdx < s.messages.length) {
+            s.messages.splice(_editingMsgIdx);
+        }
+        _editingMsgIdx = null;
+        renderEditHint();
 
         const imgs = (images || []).slice(0, MAX_IMAGES);
         s.messages.push({ role: 'user', content: userText, images: imgs.length ? imgs : undefined, ts: Date.now() });
@@ -1760,6 +1816,45 @@
         showToast('已导出 HTML', 'success');
     }
 
+    // 导出为 Markdown（图片只做占位标注，避免 base64 把文件撞到几百 MB）
+    function exportMarkdown() {
+        const s = getCurrent();
+        if (!s || s.messages.length === 0) { showToast('当前对话为空', 'warning'); return; }
+        const lines = [`# ${s.title}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')}`, ''];
+        for (const m of s.messages) {
+            lines.push(`## ${m.role === 'user' ? '我' : 'AI 助手'}`, '');
+            if (m.reasoning) {
+                lines.push('<details><summary>💭 思考过程</summary>', '', m.reasoning, '', '</details>', '');
+            }
+            if (m.images && m.images.length) {
+                lines.push(`> （附带 ${m.images.length} 张图片，未包含在 Markdown 中）`, '');
+            }
+            if (m.content) lines.push(m.content, '');
+        }
+        const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-${s.title.replace(/[^\w一-龥-]/g, '_').slice(0, 30)}-${formatTime(s.updatedAt)}.md`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('已导出 Markdown', 'success');
+    }
+
+    // 复制整段对话为纯文本
+    function copyConversation() {
+        const s = getCurrent();
+        if (!s || s.messages.length === 0) { showToast('当前对话为空', 'warning'); return; }
+        const text = s.messages.map(m => {
+            const who = m.role === 'user' ? '我' : 'AI';
+            const imgs = (m.images && m.images.length) ? `（${m.images.length}张图片）` : '';
+            return `${who}：${m.content || ''}${imgs}`;
+        }).join('\n\n');
+        copyText(text);
+    }
+
     function formatTime(ts) {
         const d = new Date(ts);
         const pad = n => String(n).padStart(2, '0');
@@ -2111,6 +2206,10 @@
         });
         document.getElementById('ai-btn-settings').addEventListener('click', openSettings);
         document.getElementById('ai-btn-export').addEventListener('click', exportHtml);
+        const $btnExportMd = document.getElementById('ai-btn-export-md');
+        if ($btnExportMd) $btnExportMd.addEventListener('click', exportMarkdown);
+        const $btnCopyConv = document.getElementById('ai-btn-copy-conv');
+        if ($btnCopyConv) $btnCopyConv.addEventListener('click', copyConversation);
         document.getElementById('ai-btn-clear-msgs').addEventListener('click', () => {
             const s = getCurrent();
             if (!s) return;
@@ -2157,6 +2256,17 @@
             $imgPrev.addEventListener('click', e => {
                 const btn = e.target.closest('[data-img-del]');
                 if (btn) removePendingImage(parseInt(btn.getAttribute('data-img-del'), 10));
+            });
+        }
+        // 取消编辑
+        const $editHint = document.getElementById('ai-edit-hint');
+        if ($editHint) {
+            $editHint.addEventListener('click', e => {
+                if (e.target.closest('#ai-edit-cancel')) {
+                    _editingMsgIdx = null;
+                    renderEditHint();
+                    showToast('已取消编辑', 'info');
+                }
             });
         }
         // 粘贴图片（Ctrl+V 直接贴截图）
@@ -2321,6 +2431,20 @@
                     codeBtn.classList.add('copied');
                     setTimeout(() => { codeBtn.innerHTML = orig; codeBtn.classList.remove('copied'); }, 1500);
                 }
+                return;
+            }
+            // 编辑用户消息
+            const editBtn = e.target.closest('.ai-msg-edit');
+            if (editBtn) {
+                e.stopPropagation();
+                startEditMessage(parseInt(editBtn.getAttribute('data-idx'), 10));
+                return;
+            }
+            // 重新生成
+            const regenBtn = e.target.closest('.ai-msg-regen');
+            if (regenBtn) {
+                e.stopPropagation();
+                regenerateAt(parseInt(regenBtn.getAttribute('data-idx'), 10));
                 return;
             }
             // 消息复制
