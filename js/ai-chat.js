@@ -210,6 +210,7 @@
         const s = {
             id: 's_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
             title: '新对话',
+            titleAuto: true,          // 标题还是自动生成的（未被 AI 改写/用户手动改）
             createdAt: Date.now(),
             updatedAt: Date.now(),
             messages: []
@@ -229,6 +230,66 @@
             else localStorage.removeItem(LS_CUR);
         }
         saveSessions();
+    }
+
+    // ---------------- 会话标题 ----------------
+    // 首轮对话结束后，用 AI 把对话内容概括成短标题（替代原来的"截前 24 个字"）
+    // 失败不重试太多次，失败时保留临时标题
+    async function generateSessionTitle(s, p) {
+        if (!s || !s.titleAuto) return;
+        if (!p.baseUrl || !p.model) return;
+        s.titleTries = (s.titleTries || 0) + 1;
+        if (s.titleTries > 3) { s.titleAuto = false; return; }   // 最多试 3 次，避免反复失败刷请求
+
+        const firstUser = s.messages.find(m => m.role === 'user');
+        const firstAsst = s.messages.find(m => m.role === 'assistant' && m.content);
+        if (!firstUser) return;
+        const snippet = [
+            `用户：${(firstUser.content || '').slice(0, 400)}`,
+            firstAsst ? `助手：${firstAsst.content.slice(0, 400)}` : ''
+        ].filter(Boolean).join('\n');
+        if (!snippet.trim()) return;
+
+        const hasCjk = /[一-龥]/.test(snippet);
+        const prompt = hasCjk
+            ? `请为下面这段对话起一个简洁的标题，不超过 12 个字。只输出标题本身，不要引号、不要句号、不要解释。\n\n${snippet}`
+            : `Give this conversation a short title, max 6 words. Output only the title, no quotes, no trailing punctuation.\n\n${snippet}`;
+
+        try {
+            const url = p.baseUrl.replace(/\/$/, '') + '/chat/completions';
+            const headers = { 'Content-Type': 'application/json' };
+            if (p.apiKey) headers['Authorization'] = 'Bearer ' + p.apiKey;
+            // 标题任务不需要思考；服务端不认 reasoning_effort 时回退重试
+            const mkBody = withEffort => JSON.stringify({
+                model: p.model,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.3,
+                max_tokens: 64,
+                stream: false,
+                ...(withEffort ? { reasoning_effort: 'none' } : {})
+            });
+            let resp = await fetch(url, { method: 'POST', headers, body: mkBody(true) });
+            if (resp.status === 400) resp = await fetch(url, { method: 'POST', headers, body: mkBody(false) });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            let title = (data?.choices?.[0]?.message?.content || '').trim();
+            // 清理：去引号/书名号/换行/markdown 标记，限长
+            title = title
+                .replace(/^[\s"'“”‘’「」『』【】《》*#]+/, '')
+                .replace(/[\s"'“”‘’「」『』【】《》*#]+$/, '')
+                .replace(/[\r\n]+/g, ' ')
+                .slice(0, 30)
+                .trim();
+            if (!title) return;
+            if (!s.titleAuto) return;      // 期间已被改写（用户手动改名）就放弃
+            s.title = title;
+            s.titleAuto = false;           // 只自动生成一次
+            s.updatedAt = Date.now();
+            saveSessions();
+            renderSessions();
+        } catch (e) {
+            console.warn('[ai-chat] 生成标题失败:', e.message);
+        }
     }
 
     // ---------------- 历史压缩 ----------------
@@ -974,7 +1035,9 @@
         s.messages.push({ role: 'user', content: userText, images: imgs.length ? imgs : undefined, ts: Date.now() });
         // 自动取首条用户消息作为会话标题
         if (s.title === '新对话' && userText.trim()) {
+            // 先给个临时标题（立即显示），稍后用 AI 概括替换
             s.title = userText.trim().slice(0, 24);
+            renderSessions();
         }
         s.updatedAt = Date.now();
         saveSessions();
@@ -1044,6 +1107,9 @@
                 $btnSend.style.display = '';
                 $btnStop.style.display = 'none';
                 compressOldMessages(s);
+                if (s.titleAuto && s.messages.some(m => m.role === 'assistant' && m.content)) {
+                    generateSessionTitle(s, p);
+                }
                 return;
             }
 
@@ -1104,6 +1170,10 @@
 
         // 回复完成后异步触发压缩（不阻塞用户继续输入）
         compressOldMessages(s);
+        // 首轮问答结束后，用 AI 概括出正式标题（同样不阻塞）
+        if (s.titleAuto && s.messages.some(m => m.role === 'assistant' && m.content)) {
+            generateSessionTitle(s, p);
+        }
     }
 
     // 助手消息正文：思考块（可折叠，像 pi / HAPI）+ 正式回答
