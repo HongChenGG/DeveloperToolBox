@@ -1028,6 +1028,9 @@
         }
         if (userIdx < 0) { showToast('找不到对应的提问', 'warning'); return; }
         const userMsg = s.messages[userIdx];
+        // 不是最后一轮时，重新生成会连带丢弃后面的对话，先确认
+        const dropped = s.messages.length - userIdx - 1;
+        if (dropped > 1 && !confirm(`重新生成会丢弃该提问之后的 ${dropped} 条消息，确定吗？`)) return;
         s.messages.splice(userIdx, s.messages.length - userIdx);
         s.updatedAt = Date.now();
         saveSessions();
