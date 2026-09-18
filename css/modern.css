@@ -1463,6 +1463,24 @@ body:is([data-theme="dark"], [data-theme="midnight"], [data-theme="cyberpunk"]) 
     opacity: 0.85;
 }
 .ai-think-inner p { margin: 6px 0; }
+
+/* 消息操作按钮（复制 / 编辑 / 重新生成 / 删除） */
+.ai-msg-act {
+    background: rgba(127, 127, 127, 0.08);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 5px;
+    line-height: 1.6;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.ai-msg-act:hover {
+    background: var(--accent-color);
+    color: #fff;
+    border-color: var(--accent-color);
+}
 .ai-msg-content blockquote {
     border-left: 3px solid var(--accent-color);
     margin: 8px 0;

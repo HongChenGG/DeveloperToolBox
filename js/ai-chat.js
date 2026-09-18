@@ -730,13 +730,13 @@
             <div data-msg-idx="${idx}" style="display:flex;justify-content:${align};animation:ai-fade-in 0.3s ease">
                 <div class="${bubbleClass}" style="max-width:82%;padding:12px 16px;border-radius:12px;position:relative">
                     <div class="ai-msg-content">${bodyHtml}</div>
-                    <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;opacity:.55;flex-wrap:wrap">
-                        <span>${isUser ? '我' : '助手'}</span>
-                        <button class="ai-msg-copy" data-idx="${idx}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">📋 复制</button>
+                    <div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
+                        <span style="font-size:11px;opacity:.55;margin-right:2px">${isUser ? '我' : '助手'}</span>
+                        <button class="ai-msg-act ai-msg-copy" data-idx="${idx}">📋 复制</button>
                         ${isUser
-                            ? `<button class="ai-msg-edit" data-idx="${idx}" title="编辑后重发，会替换该消息之后的内容" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">✏️ 编辑</button>`
-                            : `<button class="ai-msg-regen" data-idx="${idx}" title="重新生成（会丢弃这条之后的回复）" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">🔄 重新生成</button>`}
-                        <button class="ai-msg-del" data-idx="${idx}" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:11px">🗑️ 删除</button>
+                            ? `<button class="ai-msg-act ai-msg-edit" data-idx="${idx}" title="编辑后重发，会替换该消息之后的内容">✏️ 编辑</button>`
+                            : `<button class="ai-msg-act ai-msg-regen" data-idx="${idx}" title="重新生成（会丢弃这条之后的回复）">🔄 重新生成</button>`}
+                        <button class="ai-msg-act ai-msg-del" data-idx="${idx}">🗑️ 删除</button>
                     </div>
                 </div>
             </div>
