@@ -58,6 +58,8 @@
             // 思考深度控制（OpenAI 兼容的 reasoning_effort）
             // 留空 = 不发送该字段；Qwen3.8 默认 xhigh 会过度思考，建议 medium/low
             reasoningEffort: 'medium',
+            // 思考块初始状态：false = 默认折叠，true = 默认展开
+            thinkDefaultOpen: false,
             // 联网搜索（基于 OpenAI function calling，要求模型支持 tools）
             webEnabled: false,
             searchUrlTemplate: ''   // 留空 → 自动使用 DEFAULT_SEARCH_PROXY
@@ -1246,10 +1248,14 @@
         const isThinking = msg.loading && !content;
         let thinkHtml = '';
         if (reasoning) {
+            // 展开优先级：用户手动改过 > 流式思考中 > 设置里的默认值
+            const open = (msg.thinkOpen !== undefined)
+                ? msg.thinkOpen
+                : (isThinking || !!cfg.thinkDefaultOpen);
             const summary = isThinking
                 ? '💭 思考中<span class="ai-thinking ai-thinking-inline"><span></span><span></span><span></span></span>'
                 : '💭 思考过程';
-            thinkHtml = `<details class="ai-think-block"${isThinking ? ' open' : ''}>` +
+            thinkHtml = `<details class="ai-think-block"${open ? ' open' : ''}>` +
                         `<summary>${summary}</summary>` +
                         `<div class="ai-think-inner">${renderMd(reasoning)}</div>` +
                         `</details>`;
@@ -1435,6 +1441,8 @@
         p.stream           = document.getElementById('ai-cfg-stream').checked;
         const $re = document.getElementById('ai-cfg-reasoning-effort');
         if ($re) p.reasoningEffort = $re.value;
+        const $to = document.getElementById('ai-cfg-think-open');
+        if ($to) p.thinkDefaultOpen = $to.value === '1';
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) p.webEnabled = !!$web.checked;
@@ -1464,6 +1472,8 @@
         document.getElementById('ai-cfg-stream').checked          = p.stream;
         const $re = document.getElementById('ai-cfg-reasoning-effort');
         if ($re) $re.value = p.reasoningEffort || '';
+        const $to = document.getElementById('ai-cfg-think-open');
+        if ($to) $to.value = p.thinkDefaultOpen ? '1' : '0';
         const $web = document.getElementById('ai-cfg-web-enabled');
         const $url = document.getElementById('ai-cfg-search-url');
         if ($web) $web.checked = !!p.webEnabled;
@@ -2415,6 +2425,17 @@
                 renderMessages();
             }
         });
+
+        // 记录思考块的展开状态（toggle 事件不冒泡，必须用捕获阶段）
+        $msgs.addEventListener('toggle', e => {
+            const d = e.target && e.target.closest ? e.target.closest('.ai-think-block') : null;
+            if (!d) return;
+            const wrap = d.closest('[data-msg-idx]');
+            if (!wrap) return;
+            const idx = parseInt(wrap.getAttribute('data-msg-idx'), 10);
+            const s = getCurrent();
+            if (s && s.messages[idx]) s.messages[idx].thinkOpen = d.open;
+        }, true);
 
         // 消息区事件委托：复制/删除消息、复制代码块
         $msgs.addEventListener('click', e => {
