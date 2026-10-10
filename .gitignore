@@ -8,6 +8,16 @@ _patch_*/
 Thumbs.db
 .vscode/
 .idea/
+node_modules/
+playwright-report/
+test-results/
+tests/
+playwright.config.cjs
+package.json
+package-lock.json
+.github/workflows/verify.yml
+docs/superpowers/plans/
+docs/superpowers/specs/
 
 # 编辑器临时文件
 *.swp

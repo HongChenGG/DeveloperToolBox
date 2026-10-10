@@ -1,5 +1,18 @@
 // CSV / JSON / Markdown Table / SQL INSERT 互转
 (function() {
+    function toSqlLiteral(value) {
+        if (value === null || value === undefined) return 'NULL';
+        if (typeof value === 'number') return String(value);
+        if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+        return "'" + String(value).replace(/'/g, "''") + "'";
+    }
+
+    function toSqlInsert(headers, data, table) {
+        return data.map(row =>
+            `INSERT INTO ${table} (${headers.join(', ')}) VALUES (${headers.map(header => toSqlLiteral(row[header])).join(', ')});`
+        ).join('\n');
+    }
+
     function init() {
         const input = document.getElementById('tbl-input');
         if (!input) return;
@@ -63,18 +76,6 @@
             return { headers, data };
         }
 
-        function toSqlInsert(headers, data, table) {
-            const esc = v => {
-                if (v === null || v === undefined || v === '') return 'NULL';
-                if (typeof v === 'number') return v;
-                if (/^-?\d+(\.\d+)?$/.test(String(v))) return v;
-                return "'" + String(v).replace(/'/g, "''") + "'";
-            };
-            return data.map(r =>
-                `INSERT INTO ${table} (${headers.join(', ')}) VALUES (${headers.map(h => esc(r[h])).join(', ')});`
-            ).join('\n');
-        }
-
         function inferRows(text, fmt) {
             if (fmt === 'csv') {
                 const rows = parseCsv(text, sep.value || ',');
@@ -107,10 +108,17 @@
 
         btnRun && btnRun.addEventListener('click', run);
         btnCopy && btnCopy.addEventListener('click', () => {
-            if (output.value) navigator.clipboard.writeText(output.value).then(() => showToast && showToast('已复制', 'success'));
+            if (output.value) copyToClipboard(output.value);
         });
         btnClear && btnClear.addEventListener('click', () => { input.value = ''; output.value = ''; });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { toSqlInsert, toSqlLiteral };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    }
 })();

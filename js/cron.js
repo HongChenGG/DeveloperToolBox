@@ -13,6 +13,214 @@
         { label: 'Spring: 每天 2 点 30', expr: '0 30 2 * * ?' }
     ];
 
+    const CRON_INPUT_DEBOUNCE_MS = 250;
+    const MONTH_NAMES = { JAN:1, FEB:2, MAR:3, APR:4, MAY:5, JUN:6, JUL:7, AUG:8, SEP:9, OCT:10, NOV:11, DEC:12 };
+    const DOW_NAMES = { SUN:0, MON:1, TUE:2, WED:3, THU:4, FRI:5, SAT:6 };
+
+    function normalizeCronField(field, names, allowQuestionMark) {
+        let normalizedField = String(field).toUpperCase();
+        if (normalizedField === '?') {
+            if (!allowQuestionMark) throw new Error('Cron 字段不允许使用 ?');
+            return '*';
+        }
+        if (normalizedField.includes('?')) throw new Error('Cron 字段语法不完整');
+        if (normalizedField.includes('#')) throw new Error('不支持 Cron 特殊语法 #');
+
+        normalizedField = normalizedField.replace(/[A-Z]+/g, token => {
+            if (names && Object.prototype.hasOwnProperty.call(names, token)) return String(names[token]);
+            if (token.includes('L')) throw new Error('不支持 Cron 特殊语法 L');
+            if (token.includes('W')) throw new Error('不支持 Cron 特殊语法 W');
+            throw new Error(`Cron 字段包含无效字符 ${token}`);
+        });
+        return normalizedField;
+    }
+
+    function parseField(field, min, max, names, options = {}) {
+        const normalizedField = normalizeCronField(field, names, options.allowQuestionMark);
+        const parts = normalizedField.split(',');
+        const values = new Set();
+        const normalizeValue = options.normalizeValue || (value => value);
+
+        if (!normalizedField || parts.some(part => !part)) throw new Error('Cron 字段语法不完整');
+
+        const parseValue = token => {
+            if (!/^\d+$/.test(token)) throw new Error('Cron 字段必须是完整整数');
+            const value = Number(token);
+            if (!Number.isSafeInteger(value) || value < min || value > max) {
+                throw new Error(`Cron 字段值 ${token} 超出范围 ${min}-${max}`);
+            }
+            return value;
+        };
+
+        parts.forEach(part => {
+            const stepParts = part.split('/');
+            if (stepParts.length > 2) throw new Error('Cron 步长语法不完整');
+
+            const rangeText = stepParts[0];
+            let step = 1;
+            if (stepParts.length === 2) {
+                const stepText = stepParts[1];
+                step = Number(stepText);
+                if (!/^\d+$/.test(stepText) || !Number.isSafeInteger(step) || step <= 0) {
+                    throw new Error('Cron 步长必须是正整数');
+                }
+            }
+
+            let start;
+            let end;
+            if (rangeText === '*') {
+                start = min;
+                end = max;
+            } else {
+                const rangeParts = rangeText.split('-');
+                if (rangeParts.length === 1) {
+                    start = parseValue(rangeParts[0]);
+                    end = stepParts.length === 2 ? max : start;
+                } else if (rangeParts.length === 2 && rangeParts[0] && rangeParts[1]) {
+                    start = parseValue(rangeParts[0]);
+                    end = parseValue(rangeParts[1]);
+                    if (start > end) throw new Error('Cron 范围起点不得大于终点');
+                } else {
+                    throw new Error('Cron 范围语法不完整');
+                }
+            }
+
+            for (let value = start; value <= end; value += step) {
+                values.add(normalizeValue(value));
+            }
+        });
+
+        return values;
+    }
+
+    function parseCron(expression) {
+        const normalizedExpression = String(expression ?? '').trim();
+        const parts = normalizedExpression ? normalizedExpression.split(/\s+/) : [];
+        let second;
+        let minute;
+        let hour;
+        let dayOfMonth;
+        let month;
+        let dayOfWeek;
+        let year = '*';
+
+        if (parts.length === 5) {
+            [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+            second = '0';
+        } else if (parts.length === 6) {
+            [second, minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+        } else if (parts.length === 7) {
+            [second, minute, hour, dayOfMonth, month, dayOfWeek, year] = parts;
+        } else {
+            throw new Error('Cron 必须是 5/6/7 段');
+        }
+
+        return {
+            seconds: parseField(second, 0, 59),
+            minutes: parseField(minute, 0, 59),
+            hours: parseField(hour, 0, 23),
+            doms: parseField(dayOfMonth, 1, 31, null, { allowQuestionMark: true }),
+            months: parseField(month, 1, 12, MONTH_NAMES),
+            dows: parseField(dayOfWeek, 0, 7, DOW_NAMES, {
+                allowQuestionMark: true,
+                normalizeValue: value => value === 7 ? 0 : value
+            }),
+            years: parseField(year, 1970, 2199),
+            domStar: dayOfMonth === '*' || dayOfMonth === '?',
+            dowStar: dayOfWeek === '*' || dayOfWeek === '?'
+        };
+    }
+
+    function nextRuns(expression, count = 10, startDate = new Date()) {
+        if (!Number.isInteger(count) || count < 0) throw new Error('执行次数必须是非负整数');
+
+        const cron = parseCron(expression);
+        const results = [];
+        const startTimestamp = startDate && typeof startDate.getTime === 'function'
+            ? startDate.getTime()
+            : new Date(startDate).getTime();
+        if (!Number.isFinite(startTimestamp)) throw new Error('起始时间无效');
+
+        const current = new Date(startTimestamp);
+        current.setMilliseconds(0);
+        current.setSeconds(current.getSeconds() + 1);
+        const sortedYears = [...cron.years].sort((left, right) => left - right);
+        const sortedMonths = [...cron.months].sort((left, right) => left - right);
+        let iterations = 0;
+
+        while (results.length < count && iterations < 500000) {
+            iterations += 1;
+            const year = current.getFullYear();
+            const month = current.getMonth() + 1;
+            const day = current.getDate();
+            const dayOfWeek = current.getDay();
+            const hour = current.getHours();
+            const minute = current.getMinutes();
+            const second = current.getSeconds();
+
+            if (year > 2199) break;
+            if (!cron.years.has(year)) {
+                const nextYear = sortedYears.find(candidate => candidate > year);
+                if (nextYear === undefined) break;
+                current.setFullYear(nextYear, 0, 1);
+                current.setHours(0, 0, 0, 0);
+                continue;
+            }
+            if (!cron.months.has(month)) {
+                const nextMonth = sortedMonths.find(candidate => candidate > month);
+                if (nextMonth === undefined) current.setFullYear(year + 1, sortedMonths[0] - 1, 1);
+                else current.setFullYear(year, nextMonth - 1, 1);
+                current.setHours(0, 0, 0, 0);
+                continue;
+            }
+
+            // 日期和星期遵循标准 Cron 的 OR 关系。
+            const dayOfMonthMatches = cron.doms.has(day);
+            const dayOfWeekMatches = cron.dows.has(dayOfWeek);
+            let dayMatches;
+            if (cron.domStar && cron.dowStar) dayMatches = true;
+            else if (cron.domStar) dayMatches = dayOfWeekMatches;
+            else if (cron.dowStar) dayMatches = dayOfMonthMatches;
+            else dayMatches = dayOfMonthMatches || dayOfWeekMatches;
+
+            if (!dayMatches) {
+                current.setDate(current.getDate() + 1);
+                current.setHours(0, 0, 0, 0);
+                continue;
+            }
+            if (!cron.hours.has(hour)) {
+                current.setHours(current.getHours() + 1);
+                current.setMinutes(0, 0, 0);
+                continue;
+            }
+            if (!cron.minutes.has(minute)) {
+                current.setMinutes(current.getMinutes() + 1);
+                current.setSeconds(0, 0);
+                continue;
+            }
+            if (!cron.seconds.has(second)) {
+                current.setSeconds(current.getSeconds() + 1);
+                continue;
+            }
+
+            results.push(new Date(current));
+            current.setSeconds(current.getSeconds() + 1);
+        }
+
+        return results;
+    }
+
+    function debounce(callback, delay) {
+        let timerId;
+        return function debouncedCallback(...args) {
+            if (timerId !== undefined) clearTimeout(timerId);
+            timerId = setTimeout(() => {
+                timerId = undefined;
+                callback.apply(this, args);
+            }, delay);
+        };
+    }
+
     function init() {
         const input = document.getElementById('cron-input');
         if (!input) return;
@@ -30,100 +238,6 @@
         presetSel.addEventListener('change', () => {
             if (presetSel.value) { input.value = presetSel.value; run(); }
         });
-
-        // ============ 自实现 Cron 解析（支持 5/6/7 段，含 Spring 格式） ============
-        // 5 段: 分 时 日 月 周
-        // 6 段: 秒 分 时 日 月 周
-        // 7 段: 秒 分 时 日 月 周 年
-        function parseField(field, min, max, names) {
-            field = field.replace(/\?/g, '*');
-            if (names) {
-                Object.keys(names).forEach(k => {
-                    field = field.replace(new RegExp(k, 'gi'), names[k]);
-                });
-            }
-            const values = new Set();
-            field.split(',').forEach(part => {
-                let step = 1;
-                let range = part;
-                if (part.includes('/')) {
-                    const [r, s] = part.split('/');
-                    step = parseInt(s);
-                    range = r;
-                }
-                let start, end;
-                if (range === '*') { start = min; end = max; }
-                else if (range.includes('-')) {
-                    const [s, e] = range.split('-').map(Number);
-                    start = s; end = e;
-                } else {
-                    const v = parseInt(range);
-                    start = end = v;
-                    if (step === 1) { values.add(v); return; }
-                    end = max;
-                }
-                for (let i = start; i <= end; i += step) values.add(i);
-            });
-            return values;
-        }
-
-        const MONTH_NAMES = { JAN:1, FEB:2, MAR:3, APR:4, MAY:5, JUN:6, JUL:7, AUG:8, SEP:9, OCT:10, NOV:11, DEC:12 };
-        const DOW_NAMES = { SUN:0, MON:1, TUE:2, WED:3, THU:4, FRI:5, SAT:6 };
-
-        function parseCron(expr) {
-            const parts = expr.trim().split(/\s+/);
-            let sec, min, hour, dom, month, dow, year;
-            if (parts.length === 5) {
-                [min, hour, dom, month, dow] = parts;
-                sec = '0';
-            } else if (parts.length === 6) {
-                [sec, min, hour, dom, month, dow] = parts;
-            } else if (parts.length === 7) {
-                [sec, min, hour, dom, month, dow, year] = parts;
-            } else {
-                throw new Error('Cron 必须是 5/6/7 段');
-            }
-            return {
-                seconds: parseField(sec, 0, 59),
-                minutes: parseField(min, 0, 59),
-                hours: parseField(hour, 0, 23),
-                doms: parseField(dom, 1, 31),
-                months: parseField(month, 1, 12, MONTH_NAMES),
-                dows: parseField(dow.replace(/7/g, '0'), 0, 6, DOW_NAMES),
-                domStar: dom === '*' || dom === '?',
-                dowStar: dow === '*' || dow === '?',
-            };
-        }
-
-        function nextRuns(expr, count) {
-            const c = parseCron(expr);
-            const results = [];
-            const now = new Date();
-            const cur = new Date(now.getTime() + 1000);
-            cur.setMilliseconds(0);
-            let iter = 0;
-            while (results.length < count && iter < 500000) {
-                iter++;
-                const Y = cur.getFullYear(), M = cur.getMonth() + 1, D = cur.getDate();
-                const dw = cur.getDay(), h = cur.getHours(), m = cur.getMinutes(), s = cur.getSeconds();
-                if (!c.months.has(M)) { cur.setMonth(cur.getMonth() + 1); cur.setDate(1); cur.setHours(0,0,0,0); continue; }
-                // dom/dow: 标准 cron 是 OR 关系（除非都是 *）
-                const domOk = c.doms.has(D);
-                const dowOk = c.dows.has(dw);
-                let dayOk;
-                if (c.domStar && c.dowStar) dayOk = true;
-                else if (c.domStar) dayOk = dowOk;
-                else if (c.dowStar) dayOk = domOk;
-                else dayOk = domOk || dowOk;
-                if (!dayOk) { cur.setDate(cur.getDate() + 1); cur.setHours(0,0,0,0); continue; }
-                if (!c.hours.has(h)) { cur.setHours(cur.getHours() + 1); cur.setMinutes(0,0,0); continue; }
-                if (!c.minutes.has(m)) { cur.setMinutes(cur.getMinutes() + 1); cur.setSeconds(0,0); continue; }
-                if (!c.seconds.has(s)) { cur.setSeconds(cur.getSeconds() + 1); continue; }
-                results.push(new Date(cur));
-                cur.setSeconds(cur.getSeconds() + 1);
-            }
-            return results;
-        }
 
         function run() {
             const expr = (input.value || '').trim();
@@ -163,11 +277,18 @@
             }
         }
 
-        input.addEventListener('input', run);
+        input.addEventListener('input', debounce(run, CRON_INPUT_DEBOUNCE_MS));
         btnClear && btnClear.addEventListener('click', () => {
             input.value = ''; descOut.innerHTML = ''; nextOut.innerHTML = '';
         });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { CRON_INPUT_DEBOUNCE_MS, debounce, nextRuns, parseCron, parseField };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    }
 })();

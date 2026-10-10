@@ -1,5 +1,100 @@
 // YAML / JSON / Properties 互转（依赖 lib/js-yaml.min.js -> 全局 jsyaml）
 (function() {
+    const blockedPathSegments = new Set(['__proto__', 'prototype', 'constructor']);
+
+    function validatePathSegment(pathSegment) {
+        if (!pathSegment || blockedPathSegments.has(pathSegment)) {
+            throw new Error(`Properties 包含危险路径：${pathSegment || '(空)'}`);
+        }
+        return pathSegment;
+    }
+
+    function setDeepOwn(target, pathSegments, value) {
+        if (!pathSegments.length) {
+            throw new Error('Properties 键不能为空');
+        }
+
+        const safeSegments = pathSegments.map(validatePathSegment);
+        let currentObject = target;
+
+        for (let index = 0; index < safeSegments.length - 1; index++) {
+            const pathSegment = safeSegments[index];
+            if (!Object.prototype.hasOwnProperty.call(currentObject, pathSegment)
+                || currentObject[pathSegment] === null
+                || typeof currentObject[pathSegment] !== 'object') {
+                currentObject[pathSegment] = Object.create(null);
+            }
+            currentObject = currentObject[pathSegment];
+        }
+
+        currentObject[safeSegments[safeSegments.length - 1]] = value;
+    }
+
+    function parsePropertiesNumber(rawValue) {
+        if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(rawValue)) return rawValue;
+
+        const numberValue = Number(rawValue);
+        if (!Number.isFinite(numberValue)) return rawValue;
+
+        const exponentParts = rawValue.toLowerCase().split('e');
+        const decimalParts = exponentParts[0].replace(/^-/, '').split('.');
+        const fractionalDigits = decimalParts[1]?.length || 0;
+        const exponentText = exponentParts[1] || '0';
+        if (exponentText.replace(/^[+-]/, '').length > 4) return rawValue;
+        const exponent = Number(exponentText);
+        if (!Number.isInteger(exponent) || Math.abs(exponent) > 1000) return rawValue;
+        if (fractionalDigits === 0 && exponent >= 0) {
+            const integerDigits = `${decimalParts[0]}${'0'.repeat(exponent)}`.replace(/^0+/, '') || '0';
+            const integerValue = BigInt(integerDigits) * (rawValue.startsWith('-') ? -1n : 1n);
+            return integerValue >= BigInt(Number.MIN_SAFE_INTEGER) && integerValue <= BigInt(Number.MAX_SAFE_INTEGER)
+                ? Number(integerValue)
+                : rawValue;
+        }
+        const decimalPlaces = Math.max(0, fractionalDigits - exponent);
+        const digitSequence = `${decimalParts[0]}${decimalParts[1] || ''}`;
+        const removableTrailingZeros = Math.min(
+            decimalPlaces,
+            digitSequence.match(/0+$/)?.[0].length || 0
+        );
+        const adjustedDecimalPlaces = decimalPlaces - removableTrailingZeros;
+        const normalizedDigitsText = digitSequence
+            .slice(0, digitSequence.length - removableTrailingZeros)
+            .replace(/^0+/, '') || '0';
+
+        // 用十进制缩放后的安全整数验证精度，避免二进制浮点吞掉有效数字。
+        if (adjustedDecimalPlaces > 100) return rawValue;
+        const scaledNumber = numberValue * (10 ** adjustedDecimalPlaces);
+        if (!Number.isSafeInteger(scaledNumber)) return rawValue;
+        if (BigInt(normalizedDigitsText) !== BigInt(Math.abs(scaledNumber))) return rawValue;
+
+        return numberValue;
+    }
+
+    function parseProperties(text) {
+        const result = Object.create(null);
+
+        String(text || '').split(/\r?\n/).forEach(rawLine => {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('#') || line.startsWith('!')) return;
+
+            const separatorIndex = Math.min(...['=', ':'].map(separator => {
+                const index = line.indexOf(separator);
+                return index === -1 ? Infinity : index;
+            }));
+            if (separatorIndex === Infinity) return;
+
+            const key = line.slice(0, separatorIndex).trim();
+            let value = line.slice(separatorIndex + 1).trim();
+            value = parsePropertiesNumber(value);
+            if (value === 'true') value = true;
+            else if (value === 'false') value = false;
+
+            setDeepOwn(result, key.split('.'), value);
+        });
+
+        return result;
+    }
+
     function init() {
         const input = document.getElementById('conv-input');
         if (!input) return;
@@ -11,34 +106,6 @@
         const btnClear = document.getElementById('btn-conv-clear');
 
         // --- Properties 解析与生成 ---
-        function parseProperties(text) {
-            const obj = {};
-            text.split(/\r?\n/).forEach(line => {
-                line = line.trim();
-                if (!line || line.startsWith('#') || line.startsWith('!')) return;
-                const idx = Math.min(...['=', ':'].map(c => { const i = line.indexOf(c); return i === -1 ? Infinity : i; }));
-                if (idx === Infinity) return;
-                const key = line.slice(0, idx).trim();
-                let val = line.slice(idx + 1).trim();
-                // 类型推断
-                if (/^-?\d+$/.test(val)) val = parseInt(val);
-                else if (/^-?\d*\.\d+$/.test(val)) val = parseFloat(val);
-                else if (val === 'true') val = true;
-                else if (val === 'false') val = false;
-                // 嵌套
-                setDeep(obj, key.split('.'), val);
-            });
-            return obj;
-        }
-        function setDeep(obj, path, val) {
-            let cur = obj;
-            for (let i = 0; i < path.length - 1; i++) {
-                const k = path[i];
-                if (typeof cur[k] !== 'object' || cur[k] === null) cur[k] = {};
-                cur = cur[k];
-            }
-            cur[path[path.length - 1]] = val;
-        }
         function toProperties(obj, prefix = '') {
             const lines = [];
             function walk(o, p) {
@@ -120,10 +187,18 @@
 
         btnRun && btnRun.addEventListener('click', run);
         btnCopy && btnCopy.addEventListener('click', () => {
-            if (output.value) navigator.clipboard.writeText(output.value).then(() => showToast && showToast('已复制', 'success'));
+            if (output.value) copyToClipboard(output.value);
         });
         btnClear && btnClear.addEventListener('click', () => { input.value = ''; output.value = ''; });
     }
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            parseProperties,
+            setDeepOwn
+        };
+    }
+
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
 })();

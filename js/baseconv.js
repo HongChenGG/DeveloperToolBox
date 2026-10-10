@@ -1,5 +1,40 @@
 // 进制 / Unicode / ASCII 转换
 (function() {
+    function validateRadix(radix) {
+        if (!Number.isInteger(radix) || radix < 2 || radix > 36) {
+            throw new Error('进制范围必须是 2-36 的整数');
+        }
+    }
+
+    function parseBigIntByRadix(text, radix) {
+        validateRadix(radix);
+        const normalizedText = String(text ?? '').trim();
+        const match = normalizedText.match(/^([+-]?)([0-9A-Za-z]+)$/);
+        if (!match) throw new Error('请输入完整整数');
+
+        const [, sign, digits] = match;
+        const bigIntRadix = BigInt(radix);
+        let value = 0n;
+
+        for (const character of digits.toUpperCase()) {
+            const characterCode = character.charCodeAt(0);
+            const digitValue = characterCode >= 48 && characterCode <= 57
+                ? characterCode - 48
+                : characterCode - 55;
+            if (digitValue < 0 || digitValue >= radix) {
+                throw new Error(`字符 ${character} 不属于 ${radix} 进制`);
+            }
+            value = value * bigIntRadix + BigInt(digitValue);
+        }
+
+        return sign === '-' ? -value : value;
+    }
+
+    function convertBigIntRadix(text, fromRadix, toRadix) {
+        validateRadix(toRadix);
+        return parseBigIntByRadix(text, fromRadix).toString(toRadix).toUpperCase();
+    }
+
     function init() {
         const dec = document.getElementById('base-dec');
         if (!dec) return;
@@ -27,16 +62,18 @@
             if (updating) return;
             updating = true;
             try {
-                const n = srcEl.value.trim();
-                if (!n) { [dec, bin, oct, hex].forEach(e => { if (e !== srcEl) e.value = ''; }); updating = false; return; }
-                const val = parseInt(n, srcBase);
-                if (isNaN(val)) throw new Error('无法解析');
-                if (srcEl !== dec) dec.value = val.toString(10);
-                if (srcEl !== bin) bin.value = val.toString(2);
-                if (srcEl !== oct) oct.value = val.toString(8);
-                if (srcEl !== hex) hex.value = val.toString(16).toUpperCase();
+                const inputText = srcEl.value.trim();
+                if (!inputText) {
+                    [dec, bin, oct, hex].forEach(element => { if (element !== srcEl) element.value = ''; });
+                    return;
+                }
+                const value = parseBigIntByRadix(inputText, srcBase);
+                if (srcEl !== dec) dec.value = value.toString(10);
+                if (srcEl !== bin) bin.value = value.toString(2);
+                if (srcEl !== oct) oct.value = value.toString(8);
+                if (srcEl !== hex) hex.value = value.toString(16).toUpperCase();
             } catch (e) { /* ignore */ }
-            updating = false;
+            finally { updating = false; }
         }
         dec && dec.addEventListener('input', () => syncFrom(10, dec));
         bin && bin.addEventListener('input', () => syncFrom(2, bin));
@@ -45,12 +82,9 @@
 
         btnCustom && btnCustom.addEventListener('click', () => {
             try {
-                const f = parseInt(customFrom.value);
-                const t = parseInt(customTo.value);
-                if (f < 2 || f > 36 || t < 2 || t > 36) throw new Error('进制范围 2-36');
-                const val = parseInt(customIn.value.trim(), f);
-                if (isNaN(val)) throw new Error('无法解析');
-                customOut.value = val.toString(t).toUpperCase();
+                const fromRadix = Number(customFrom.value);
+                const toRadix = Number(customTo.value);
+                customOut.value = convertBigIntRadix(customIn.value, fromRadix, toRadix);
             } catch (e) { customOut.value = '错误: ' + e.message; }
         });
 
@@ -87,6 +121,13 @@
             uniDecodeOut.value = s;
         });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { convertBigIntRadix, parseBigIntByRadix };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    }
 })();

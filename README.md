@@ -3,11 +3,10 @@
 <div align="center">
 
 ![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Web-orange.svg)
 ![Offline](https://img.shields.io/badge/offline-ready-success.svg)
 
-**一站式纯离线开发者工具集 · 30+ 工具 · 7 套主题 · 零依赖运行**
+**一站式离线优先开发者工具集 · 30+ 工具 · 7 套主题 · 零构建运行**
 
 [✨ 特性](#-特性) • [🚀 快速开始](#-快速开始) • [🛠️ 功能列表](#️-功能列表) • [🎨 主题](#-主题) • [📝 更新日志](#-更新日志)
 
@@ -19,16 +18,17 @@
 
 ## 📖 简介
 
-红尘百宝箱是一个集成 **30+ 实用开发工具** 的纯前端 Web 应用。所有依赖（Vue、ElementUI、Three.js 等）全部本地化，**断网也能用**，数据全程在浏览器本地处理，绝不外传。
+红尘百宝箱是一个集成 **30+ 实用开发工具** 的纯前端 Web 应用。Vue、Element UI、Three.js、Markdown、KaTeX、代码高亮等运行依赖全部本地化；断网时本地工具照常使用，需要公网的天气、音乐和 AI 联网搜索会静默隐藏。
 
 ### ✨ 特性
 
 - 🎯 **工具齐全** — JSON / SQL / JWT / Cron / Hash / 正则 / 代码生成 / Vue 速查……一网打尽
-- 🌐 **纯离线运行** — Vue、ElementUI、Three.js 全部 vendor 本地化，无网可用
+- 🌐 **离线优先运行** — 启动不访问外网；断网静默隐藏天气、音乐和联网搜索，恢复网络后自动显示
 - 🎨 **7 套主题** — 含深色与极光午夜，按钮/阴影随主题色动态切换
-- 💾 **本地存储** — 数据保存在 localStorage，安全可靠
+- 💾 **本地存储** — 会话、会议、提醒和片段保存在当前浏览器，并支持损坏恢复或备份导出
 - 🌌 **3D 背景** — Three.js 粒子背景，主题感知配色
-- 🎵 **音乐播放** — 黑胶唱片悬浮窗，边工作边听歌
+- 🤖 **AI 对话助手** — OpenAI 兼容接口 / 本地 Ollama、会话分支、备份恢复、文件上下文、上下文预算、联网来源审批
+- 🎵 **音乐播放** — 用户打开播放器后才加载在线歌单
 - 🌤️ **天气 + 会议纪要** — 顺手的生活/办公小工具
 - 🚀 **零构建** — 双击 index.html 即可运行，无需任何框架/打包工具
 
@@ -41,8 +41,7 @@
 | 工具 | 说明 |
 |------|------|
 | **Vue 2 / Vue 3 速查** | 三段式（是什么/为什么/什么时候用）+ 行内中文注释，小白友好 |
-| **ElementUI 速查** | 22 个常用组件 · Attributes / Events / Slots / Methods 完整列表 |
-| **Vue Playground** | 在线编辑 Vue 2/3 单文件组件，实时预览 |
+| **Vue Playground** | 本地 Vue 2 + Element UI 组件编辑与沙箱实时预览 |
 | **Vue SFC 生成器** | 一键生成 `<template>/<script>/<style>` 骨架 |
 
 ### 📝 数据处理
@@ -51,7 +50,7 @@
 |------|------|
 | **JSON 格式化** | 格式化/压缩/字段识别/批量填充 |
 | **SQL 拼接 / 字段清洗** | IN 查询拼接、字段批量清理 |
-| **表格转换** | Markdown / HTML / CSV / Excel 互转 |
+| **表格转换** | Markdown / CSV / JSON / SQL INSERT 互转 |
 | **文本对比** | diff 高亮，行级差异展示 |
 
 ### 🔧 编码 / 转换
@@ -63,7 +62,7 @@
 | **Base 进制转换** | 二/八/十/十六进制互转 |
 | **大小写转换** | camelCase / snake_case / PascalCase / kebab-case |
 | **配置格式互转** | JSON ⇄ YAML ⇄ Properties ⇄ XML |
-| **JWT 解析** | Header / Payload 解码与签名校验 |
+| **JWT 解析** | Header / Payload 解码与过期时间展示（不验证签名） |
 | **时间戳转换** | 时间戳 ⇄ 日期，多时区显示 |
 
 ### ⚙️ 代码生成
@@ -99,6 +98,16 @@
 | **天气查询** | 50+ 城市，24h / 7d 预报 |
 | **音乐播放器** | 悬浮窗，黑胶旋转效果 |
 
+### 🤖 AI 助手
+
+| 功能 | 说明 |
+|------|------|
+| **本地与兼容接口** | 优先支持本机 Ollama，也支持 OpenAI 兼容中转服务 |
+| **会话管理** | 搜索、置顶、非破坏式编辑/重新生成分支、继续生成 |
+| **上下文** | Skills、图片、本轮文本文件、长对话摘要、上下文预算估算 |
+| **备份恢复** | 会话/Profile/Skills JSON 合并或覆盖恢复，API Key 默认不导出 |
+| **联网工具** | 网络可用时显示；新域名访问需审批，并保留来源记录 |
+
 ---
 
 ## 🎨 主题
@@ -121,7 +130,9 @@
 
 ### 直接使用
 
-双击 `index.html` 即可运行 — 所有依赖已 vendor 本地化，**完全不需要联网**。
+双击 `index.html` 即可运行。JSON、SQL、编码转换、文档、Markdown、Playground 等本地功能无需联网；天气、音乐、云端 AI 和联网搜索按需访问网络。
+
+页面启动阶段不会主动探测或访问第三方地址。浏览器报告离线时，天气、音乐、DeepSeek/OneAPI 快速预设与 AI 联网搜索会静默隐藏，网络恢复后自动显示。本地 Ollama 入口始终保留。
 
 ### 本地部署（可选）
 
@@ -134,6 +145,12 @@ python -m http.server 8080
 # 或
 npx http-server -p 8080
 ```
+
+### 本地 Ollama CORS
+
+通过本地 HTTP 访问百宝箱时，建议只把实际页面 Origin 加入 Ollama 的允许列表，例如 `http://127.0.0.1:8080` 或 `http://localhost:8080`。不同 Ollama 版本的配置方式可能不同，请以当前版本文档为准。
+
+`OLLAMA_ORIGINS=*` 只适合临时排障；它会允许任意网页向本机 Ollama 发起跨域请求，不建议作为长期配置。`file://` 页面如受浏览器跨域策略限制，优先使用上面的本地静态服务器方式运行。
 
 ### 浏览器要求
 
@@ -150,14 +167,15 @@ toolbox/
 ├── README.md
 ├── css/
 │   ├── style.css              # 主样式
-│   ├── modern.css             # 现代化样式系统
-│   └── stars.css              # 星空特效
+│   └── modern.css             # 现代化样式系统
 ├── js/
 │   ├── app.js                 # 主应用
+│   ├── security.js            # 安全 URL / Markdown 渲染边界
+│   ├── ai-chat-core.js        # AI 数据迁移、SSE、分支、备份等纯逻辑
+│   ├── ai-chat.js             # AI 页面与请求编排
 │   ├── theme.js               # 主题切换 + 动态按钮配色
 │   ├── three-bg.js            # 3D 粒子背景
 │   ├── vue-docs.js            # Vue 2/3 速查文档
-│   ├── eui-docs.js            # ElementUI 速查文档
 │   ├── vue-playground.js      # Vue 在线 Playground
 │   ├── jwt.js / cron.js / regex.js / ipcalc.js / hash.js
 │   ├── json2class.js / pojo-mapper.js / mybatis-gen.js
@@ -166,6 +184,7 @@ toolbox/
 │   ├── baseconv.js / caseconv.js / configconv.js
 │   ├── idgen.js / api-mock.js / snippets.js
 │   ├── notes.js / weather.js / music.js
+│   ├── regex-worker.js / hash-worker.js
 │   └── offline-detect.js / enhance.js / page-meta.js
 ├── lib/                        # 第三方库（本地化）
 │   ├── three.min.js           # 3D 背景
@@ -173,9 +192,10 @@ toolbox/
 │   ├── crypto-js.min.js       # 加密
 │   ├── diff.min.js            # 文本对比
 │   ├── js-yaml.min.js         # YAML 解析
-│   └── cronstrue*.min.js      # Cron 翻译
+│   └── cronstrue-i18n.min.js  # Cron 翻译
 └── vendor/                     # 重型框架（离线）
     ├── vue.min.js             # Vue 2.7
+    ├── vue-playground-host.html # file:// 可用的隔离预览宿主页
     └── element-ui/            # ElementUI 2.15
 ```
 
@@ -183,10 +203,13 @@ toolbox/
 
 ## 🔒 隐私与安全
 
-- ✅ **纯前端** — 所有处理在浏览器本地完成
-- ✅ **零外传** — 不向任何服务器发送用户数据
-- ✅ **离线可用** — 第三方库全部 vendor 本地化
-- ✅ **开源透明** — 代码可自行审查
+- ✅ **本地工具不外传** — JSON、SQL、转换器、文档、笔记和代码生成等在浏览器本地处理
+- ✅ **启动零外网请求** — 不使用百度等第三方探测网络
+- ✅ **断网可用** — 第三方运行库全部 vendor 本地化
+- ✅ **沙箱预览** — Playground 预览不能读取父页面 DOM 或 localStorage
+- ⚠️ **云端 AI** — API Key 作为请求头发送给你配置的模型服务；对话、图片、系统提示词、Skills 与本轮文件也会发送给该服务
+- ⚠️ **天气 / 音乐 / 联网搜索** — 仅在用户主动操作时访问对应第三方或搜索代理
+- ⚠️ **共享代理 Token** — 静态前端中的默认代理 Token 无法保密，只能通过 Worker 限制目标地址、超时、响应体积和域名审批缩小风险
 
 ---
 
@@ -197,10 +220,11 @@ toolbox/
 - [x] 基础工具集成（30+）
 - [x] 7 套主题 + 动态按钮配色
 - [x] 3D 粒子背景
-- [x] Vue 2 / Vue 3 / ElementUI 速查文档（小白友好版）
+- [x] Vue 2 / Vue 3 速查文档（小白友好版）
 - [x] Vue Playground 在线编辑器
 - [x] Markdown 编辑器 / 正则测试 / 代码生成系列
-- [x] 纯离线运行（Vue + ElementUI 本地化）
+- [x] 离线优先运行（启动零外网请求，联网功能动态显隐）
+- [x] AI 会话分支、备份恢复、上下文预算、本地文件与联网来源审批
 
 ### 计划中 📋
 
@@ -216,7 +240,6 @@ toolbox/
 ### v2.0.0 (2026-05)
 
 - ✨ **新增 Vue 2/Vue 3 速查文档** — 三段式说明 + 行内中文注释，小白友好
-- ✨ **新增 ElementUI 速查文档** — 22 个常用组件，含 Attrs/Events/Slots/Methods
 - ✨ **新增 Vue Playground** — 在线编辑 Vue SFC，实时预览
 - ✨ **新增大批工具** — JWT、Cron、正则、IP 计算、Hash、Markdown、文本对比、表格/Base/大小写/配置转换、UUID、Spring/Lombok/MyBatis/POJO 代码生成等
 - 🎨 **主题按钮动态配色** — 主题设置 + 音乐按钮按主题色渲染渐变/阴影
@@ -229,7 +252,6 @@ toolbox/
 - 🎉 首次发布，集成 10+ 基础工具
 - 🎨 6 套主题
 - 🎵 音乐播放器 + 🌤️ 天气查询 + 📋 会议纪要
-- 🌟 星空背景特效
 
 ---
 
@@ -247,7 +269,7 @@ toolbox/
 
 ## 📄 许可证
 
-MIT — 详见 [LICENSE](LICENSE)
+当前仓库尚未包含独立许可证文件；使用、修改或分发前请先确认仓库所有者的授权范围。
 
 ---
 

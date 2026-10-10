@@ -131,7 +131,7 @@
         });
         btnCopy && btnCopy.addEventListener('click', () => {
             if (!out.value) return;
-            navigator.clipboard.writeText(out.value).then(() => showToast && showToast('已复制', 'success'));
+            copyToClipboard(out.value);
         });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

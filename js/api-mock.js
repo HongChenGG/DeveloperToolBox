@@ -2,11 +2,23 @@
 (function () {
     'use strict';
 
+    // 使用已分配的中国大陆手机号段，尾号固定生成八位数字。
+    const PHONE_PREFIXES = Object.freeze([
+        '130', '131', '132', '133', '134', '135', '136', '137', '138', '139',
+        '145', '146', '147', '148', '149',
+        '150', '151', '152', '153', '155', '156', '157', '158', '159',
+        '162', '165', '166', '167',
+        '170', '171', '172', '173', '175', '176', '177', '178',
+        '180', '181', '182', '183', '184', '185', '186', '187', '188', '189',
+        '190', '191', '192', '193', '195', '196', '197', '198', '199'
+    ]);
+    const MAX_LIST_COUNT = 100;
+
     const FAKERS = {
         string: () => randomChinese(2, 6),
         name: () => '张' + randomChinese(1, 2),
         email: () => randomEnglish(6) + '@example.com',
-        phone: () => '1' + (Math.floor(Math.random() * 9) + 3) + Array.from({ length: 9 }, () => Math.floor(Math.random() * 10)).join(''),
+        phone: () => generatePhone(),
         url: () => 'https://example.com/' + randomEnglish(8),
         int: () => Math.floor(Math.random() * 1000),
         float: () => +(Math.random() * 100).toFixed(2),
@@ -31,6 +43,13 @@
         return s;
     }
 
+    // 从固定三位前缀表中取值，再补足八位随机尾号。
+    function generatePhone() {
+        const prefix = PHONE_PREFIXES[Math.floor(Math.random() * PHONE_PREFIXES.length)];
+        const suffix = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10)).join('');
+        return prefix + suffix;
+    }
+
     function mockField(field) {
         const type = (field.type || 'string').toLowerCase();
         if (FAKERS[type]) return FAKERS[type]();
@@ -42,7 +61,11 @@
     function generate(cfg) {
         // 单条 / 列表
         if (cfg.isList) {
-            return Array.from({ length: cfg.listCount || 10 }, () => buildOne(cfg.fields));
+            const requestedCount = Number.parseInt(cfg.listCount, 10);
+            const listCount = Number.isFinite(requestedCount) && requestedCount > 0
+                ? Math.min(requestedCount, MAX_LIST_COUNT)
+                : 10;
+            return Array.from({ length: listCount }, () => buildOne(cfg.fields));
         }
         return buildOne(cfg.fields);
     }
@@ -52,17 +75,28 @@
         return o;
     }
 
+    // 根据 Axios 方法约定放置 params、data 或请求体。
+    function buildAxiosCall(method, url, data) {
+        const normalizedMethod = String(method || 'GET').toUpperCase();
+        const methodName = normalizedMethod.toLowerCase();
+        const payload = typeof data === 'string' ? data : JSON.stringify(data ?? {});
+
+        if (normalizedMethod === 'GET') return `axios.get('${url}', { params: ${payload} })`;
+        if (normalizedMethod === 'DELETE') return `axios.delete('${url}', { data: ${payload} })`;
+        if (['POST', 'PUT', 'PATCH'].includes(normalizedMethod)) {
+            return `axios.${methodName}('${url}', ${payload})`;
+        }
+        throw new Error(`不支持的请求方法：${normalizedMethod}`);
+    }
+
     function genAxios(url, method, data, isList) {
+        const requestData = isList ? { items: Array.isArray(data) ? data : [data] } : data;
+        const axiosCall = buildAxiosCall(method, url, requestData);
         const lines = [];
         lines.push('// axios 调用示例');
         lines.push(`import axios from 'axios';`);
         lines.push('');
-        if (method === 'GET') {
-            lines.push(`axios.get('${url}', { params: { page: 1, size: 10 } })`);
-        } else {
-            const body = isList ? '{ items: [...] }' : JSON.stringify(data, null, 2);
-            lines.push(`axios.${method.toLowerCase()}('${url}', ${body})`);
-        }
+        lines.push(axiosCall);
         lines.push(`  .then(res => {`);
         lines.push(`    console.log(res.data);`);
         lines.push(`  })`);
@@ -74,7 +108,7 @@
         lines.push(`async fetchData() {`);
         lines.push(`  try {`);
         lines.push(`    this.loading = true;`);
-        lines.push(`    const { data } = await axios.${method.toLowerCase()}('${url}');`);
+        lines.push(`    const { data } = await ${axiosCall};`);
         lines.push(`    this.list = data${isList ? '' : ''};`);
         lines.push(`  } finally {`);
         lines.push(`    this.loading = false;`);
@@ -135,9 +169,26 @@
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // Node 测试通过条件导出访问纯函数，浏览器仍按原流程初始化。
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            FAKERS,
+            MAX_LIST_COUNT,
+            PHONE_PREFIXES,
+            buildAxiosCall,
+            buildOne,
+            genAxios,
+            generate,
+            generatePhone,
+            mockField
+        };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     }
 })();

@@ -7,6 +7,30 @@
         return prefix + name[0].toUpperCase() + name.slice(1);
     }
 
+    // 提取字段修饰符与初始化器，供构造器和 Builder 复用。
+    function parseFields(src) {
+        const fields = [];
+        const fieldRegex = /(?:^|\n)\s*(?:private|protected|public)\s+(?:(final)\s+)?(\w+(?:<[^>]+>)?(?:\[\])?)\s+(\w+)\s*(?:=\s*([^;]+))?;/g;
+        let fieldMatch;
+        while ((fieldMatch = fieldRegex.exec(src)) !== null) {
+            fields.push({
+                type: fieldMatch[2],
+                name: fieldMatch[3],
+                isFinal: Boolean(fieldMatch[1]),
+                initializer: fieldMatch[4] === undefined ? null : fieldMatch[4].trim()
+            });
+        }
+        return fields;
+    }
+
+    // force=true 时按 Java 类型生成字段默认值。
+    function defaultValueForType(type) {
+        if (type === 'boolean') return 'false';
+        if (type === 'char') return "'\\0'";
+        if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(type)) return '0';
+        return 'null';
+    }
+
     function expand(src) {
         const classMatch = src.match(/(?:^|\s)(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/);
         if (!classMatch) throw new Error('未找到 class 定义');
@@ -14,15 +38,11 @@
 
         // 类上的注解
         const beforeClass = src.substring(0, classMatch.index);
-        const annotations = (beforeClass.match(/@\w+(?:\([^)]*\))?/g) || []).map(a => a.replace(/\(.*/, ''));
+        const annotationTexts = beforeClass.match(/@\w+(?:\s*\([^)]*\))?/g) || [];
+        const annotations = annotationTexts.map(annotation => annotation.replace(/\s*\(.*/, ''));
 
         // 字段提取
-        const fields = [];
-        const fieldRegex = /(?:^|\n)\s*(?:private|protected|public)\s+(?:final\s+)?(\w+(?:<[^>]+>)?(?:\[\])?)\s+(\w+)\s*(?:=\s*[^;]+)?;/g;
-        let m;
-        while ((m = fieldRegex.exec(src)) !== null) {
-            fields.push({ type: m[1], name: m[2] });
-        }
+        const fields = parseFields(src);
         if (fields.length === 0) throw new Error('未找到任何字段（需要形如 private String name;）');
 
         const has = (a) => annotations.includes(a);
@@ -32,25 +52,53 @@
         const hasToString = data || has('@ToString');
         const hasEquals = data || has('@EqualsAndHashCode');
         const hasBuilder = has('@Builder');
-        const hasNoArgs = data || has('@NoArgsConstructor');
+        const hasNoArgs = has('@NoArgsConstructor');
         const hasAllArgs = has('@AllArgsConstructor');
+        const noArgsAnnotation = annotationTexts.find(annotation => annotation.startsWith('@NoArgsConstructor')) || '';
+        const forceNoArgs = /\bforce\s*=\s*true\b/.test(noArgsAnnotation);
+        const requiredFields = fields.filter(field => field.isFinal && field.initializer === null);
+
+        if (hasNoArgs && requiredFields.length > 0 && !forceNoArgs) {
+            throw new Error('@NoArgsConstructor 遇到未初始化 final 字段时需要 force = true');
+        }
 
         const out = [];
         out.push(`public class ${className} {`);
-        fields.forEach(f => out.push(`    private ${f.type} ${f.name};`));
+        fields.forEach(field => {
+            const finalModifier = field.isFinal ? 'final ' : '';
+            const initializer = field.initializer === null ? '' : ` = ${field.initializer}`;
+            out.push(`    private ${finalModifier}${field.type} ${field.name}${initializer};`);
+        });
         out.push('');
 
-        if (hasNoArgs) {
-            out.push(`    public ${className}() {`);
+        // 按参数类型去重，避免组合注解生成重复构造器。
+        const constructorSignatures = new Set();
+        const appendConstructor = (constructorFields, visibility = 'public', defaultedFields = []) => {
+            const signature = constructorFields.map(field => field.type).join(',');
+            if (constructorSignatures.has(signature)) return;
+            constructorSignatures.add(signature);
+
+            const params = constructorFields.map(field => `${field.type} ${field.name}`).join(', ');
+            out.push(`    ${visibility} ${className}(${params}) {`);
+            constructorFields.forEach(field => out.push(`        this.${field.name} = ${field.name};`));
+            defaultedFields.forEach(field => out.push(`        this.${field.name} = ${defaultValueForType(field.type)};`));
             out.push('    }');
             out.push('');
+        };
+
+        if (hasNoArgs) {
+            appendConstructor([], 'public', forceNoArgs ? requiredFields : []);
+        } else if (data && requiredFields.length === 0) {
+            appendConstructor([]);
+        }
+        if (data && requiredFields.length > 0) {
+            appendConstructor(requiredFields);
         }
         if (hasAllArgs) {
-            const params = fields.map(f => `${f.type} ${f.name}`).join(', ');
-            out.push(`    public ${className}(${params}) {`);
-            fields.forEach(f => out.push(`        this.${f.name} = ${f.name};`));
-            out.push('    }');
-            out.push('');
+            appendConstructor(fields);
+        }
+        if (hasBuilder) {
+            appendConstructor(fields, 'private');
         }
         if (hasGetter) {
             fields.forEach(f => {
@@ -61,7 +109,7 @@
             });
         }
         if (hasSetter) {
-            fields.forEach(f => {
+            fields.filter(field => !field.isFinal).forEach(f => {
                 out.push(`    public void ${methodName('set', f.name)}(${f.type} ${f.name}) {`);
                 out.push(`        this.${f.name} = ${f.name};`);
                 out.push('    }');
@@ -107,9 +155,7 @@
                 out.push('');
             });
             out.push(`        public ${className} build() {`);
-            out.push(`            ${className} obj = new ${className}();`);
-            fields.forEach(f => out.push(`            obj.${f.name} = this.${f.name};`));
-            out.push('            return obj;');
+            out.push(`            return new ${className}(${fields.map(field => `this.${field.name}`).join(', ')});`);
             out.push('        }');
             out.push('    }');
         }
@@ -156,15 +202,20 @@ public class User {
 
         if (btnCopy) btnCopy.addEventListener('click', () => {
             if (!output.value) return;
-            navigator.clipboard.writeText(output.value).then(() => {
-                if (typeof showToast === 'function') showToast('已复制', 'success');
-            });
+            copyToClipboard(output.value);
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // Node 测试通过条件导出访问纯函数，浏览器仍按原流程初始化。
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { defaultValueForType, expand, methodName, parseFields };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     }
 })();

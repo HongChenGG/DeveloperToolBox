@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vue Playground Preview</title>
+    <link rel="stylesheet" href="element-ui/index.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 1.25rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+            color: #303133;
+            background: #fff;
+        }
+        .el-button { margin: 0.25rem; }
+        .preview-error {
+            padding: 0.75rem;
+            border: 1px solid #f56c6c;
+            border-radius: 0.5rem;
+            color: #f56c6c;
+            background: #fef0f0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script src="vue.min.js"></script>
+    <script src="element-ui/index.js"></script>
+    <script>
+        (function initializePlaygroundHost() {
+            'use strict';
+
+            let currentApplication = null;
+
+            function compileObjectMembers(source, label) {
+                try {
+                    return new Function(`"use strict"; return { ${source || ''} };`)();
+                } catch (error) {
+                    throw new Error(`${label} 解析失败：${error.message}`);
+                }
+            }
+
+            function renderError(error) {
+                if (currentApplication) {
+                    currentApplication.$destroy();
+                    currentApplication = null;
+                }
+                const errorElement = document.createElement('div');
+                errorElement.className = 'preview-error';
+                errorElement.textContent = error.message;
+                document.body.replaceChildren(errorElement);
+            }
+
+            function renderPreview(payload) {
+                if (typeof Vue === 'undefined' || typeof ELEMENT === 'undefined') {
+                    throw new Error('本地 Vue 或 Element UI 资源未加载');
+                }
+
+                if (currentApplication) currentApplication.$destroy();
+                const mountElement = document.createElement('div');
+                mountElement.id = 'app';
+                document.body.replaceChildren(mountElement);
+
+                const dataValues = compileObjectMembers(payload.dataExtra, 'data');
+                const methods = compileObjectMembers(payload.methodsExtra, 'methods');
+                currentApplication = new Vue({
+                    el: '#app',
+                    template: String(payload.template || '<div></div>'),
+                    data() {
+                        return dataValues;
+                    },
+                    methods
+                });
+            }
+
+            Vue.use(ELEMENT);
+            window.addEventListener('message', event => {
+                if (event.source !== parent || event.data?.type !== 'toolbox-playground-render') return;
+                try {
+                    renderPreview(event.data);
+                } catch (error) {
+                    renderError(error);
+                }
+            });
+            parent.postMessage({ type: 'toolbox-playground-ready' }, '*');
+        }());
+    </script>
+</body>
+</html>

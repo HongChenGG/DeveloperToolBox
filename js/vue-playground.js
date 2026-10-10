@@ -206,35 +206,6 @@
         },
     ];
 
-    // 把示例代码组装成完整 HTML，注入 iframe srcdoc
-    function buildHtml(code, dataExtra, methodsExtra) {
-        // 注意：相对路径在 srcdoc 不可用，必须用绝对 URL 或 base
-        const vueUrl = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + 'vendor/vue.min.js';
-        const elUrl = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + 'vendor/element-ui/index.js';
-        const cssUrl = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + 'vendor/element-ui/index.css';
-
-        return `<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<link rel="stylesheet" href="${cssUrl}">
-<style>body{font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif;padding:20px;margin:0}.el-button{margin:4px}</style>
-</head><body>
-<div id="app">
-${code}
-</div>
-<script src="${vueUrl}"><\/script>
-<script src="${elUrl}"><\/script>
-<script>
-Vue.use(ELEMENT);
-new Vue({
-  el: '#app',
-  data(){ return { ${dataExtra || ''} }; },
-  methods: { ${methodsExtra || ''} }
-});
-<\/script>
-</body></html>`;
-    }
-
     function init() {
         const sidebar = document.getElementById('vp-sidebar');
         if (!sidebar) return;
@@ -245,6 +216,7 @@ new Vue({
         const search = document.getElementById('vp-search');
 
         let currentComp = null;
+        let previewReady = false;
 
         function renderSidebar(kw = '') {
             const lower = kw.toLowerCase().trim();
@@ -328,14 +300,33 @@ new Vue({
         }
 
         function run() {
-            if (!currentComp) return;
-            const html = buildHtml(editor.value, currentComp.dataExtra, currentComp.methodsExtra);
-            iframe.srcdoc = html;
+            if (!currentComp || !previewReady || !iframe.contentWindow) return;
+            iframe.contentWindow.postMessage({
+                type: 'toolbox-playground-render',
+                template: editor.value,
+                dataExtra: currentComp.dataExtra || '',
+                methodsExtra: currentComp.methodsExtra || ''
+            }, '*');
         }
 
         function escape(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
         btnRun.addEventListener('click', run);
+        iframe.addEventListener('load', () => {
+            previewReady = true;
+            run();
+        });
+        window.addEventListener('message', event => {
+            if (event.source !== iframe.contentWindow || event.data?.type !== 'toolbox-playground-ready') return;
+            previewReady = true;
+            run();
+        });
+        // file:// 下需要 allow-same-origin 才能读取同目录脚本；Chromium 会把不同 file URL
+        // 视为隔离来源，预览页仍无法访问父页面 DOM/localStorage。
+        iframe.setAttribute('sandbox', location.protocol === 'file:'
+            ? 'allow-scripts allow-same-origin'
+            : 'allow-scripts');
+        iframe.src = new URL(iframe.dataset.src, document.baseURI).href;
         editor.addEventListener('keydown', (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); }
             // Tab 转换为空格

@@ -176,9 +176,7 @@
         btnGen && btnGen.addEventListener('click', generate);
         btnCopy && btnCopy.addEventListener('click', () => {
             if (!output.textContent) return;
-            navigator.clipboard.writeText(output.textContent).then(() => {
-                if (typeof showToast === 'function') showToast('已复制', 'success');
-            });
+            copyToClipboard(output.textContent);
         });
         btnClear && btnClear.addEventListener('click', () => { input.value = ''; output.textContent = ''; });
     }

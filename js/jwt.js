@@ -48,24 +48,42 @@
                 payloadOut.textContent = JSON.stringify(payload, null, 2);
                 signatureOut.textContent = parts[2];
 
-                // 元信息
+                // 元信息只通过文本节点渲染，JWT 中的字段均视为不可信输入。
                 const now = Math.floor(Date.now() / 1000);
-                const meta = [];
-                if (header.alg) meta.push(`算法: ${header.alg}`);
-                if (header.typ) meta.push(`类型: ${header.typ}`);
-                if (payload.iss) meta.push(`签发方 (iss): ${payload.iss}`);
-                if (payload.sub) meta.push(`主体 (sub): ${payload.sub}`);
-                if (payload.aud) meta.push(`受众 (aud): ${payload.aud}`);
-                if (payload.iat) meta.push(`签发于 (iat): ${formatTs(payload.iat)}`);
-                if (payload.nbf) meta.push(`生效于 (nbf): ${formatTs(payload.nbf)}`);
+                metaOut.replaceChildren();
+
+                const appendMetaLine = (label, value, status) => {
+                    const line = document.createElement('div');
+                    line.style.padding = '0.25rem 0';
+                    line.append(document.createTextNode(`${label}: ${String(value)}`));
+
+                    if (status) {
+                        const statusText = document.createElement('span');
+                        statusText.style.color = status.valid
+                            ? 'var(--success-color)'
+                            : 'var(--danger-color)';
+                        statusText.style.fontWeight = 'bold';
+                        statusText.textContent = ` ${status.text}`;
+                        line.appendChild(statusText);
+                    }
+
+                    metaOut.appendChild(line);
+                };
+
+                appendMetaLine('安全提示', '仅解码内容，未验证签名');
+                if (header.alg) appendMetaLine('算法', header.alg);
+                if (header.typ) appendMetaLine('类型', header.typ);
+                if (payload.iss) appendMetaLine('签发方 (iss)', payload.iss);
+                if (payload.sub) appendMetaLine('主体 (sub)', payload.sub);
+                if (payload.aud) appendMetaLine('受众 (aud)', Array.isArray(payload.aud) ? payload.aud.join(', ') : payload.aud);
+                if (payload.iat) appendMetaLine('签发于 (iat)', formatTs(payload.iat));
+                if (payload.nbf) appendMetaLine('生效于 (nbf)', formatTs(payload.nbf));
                 if (payload.exp) {
                     const left = payload.exp - now;
-                    const status = left > 0
-                        ? `<span style="color:var(--success-color);font-weight:bold">✓ 有效（剩余 ${formatDuration(left)}）</span>`
-                        : `<span style="color:var(--danger-color);font-weight:bold">✗ 已过期（${formatDuration(-left)} 前）</span>`;
-                    meta.push(`过期于 (exp): ${formatTs(payload.exp)} ${status}`);
+                    appendMetaLine('过期于 (exp)', formatTs(payload.exp), left > 0
+                        ? { valid: true, text: `✓ 时间上未过期（剩余 ${formatDuration(left)}）` }
+                        : { valid: false, text: `✗ 已过期（${formatDuration(-left)} 前）` });
                 }
-                metaOut.innerHTML = meta.map(m => `<div style="padding:4px 0">${m}</div>`).join('');
                 if (typeof showToast === 'function') showToast('解析成功', 'success');
             } catch (e) {
                 if (typeof showToast === 'function') showToast('解析失败: ' + e.message, 'error');
@@ -92,7 +110,7 @@
             headerOut.textContent = '';
             payloadOut.textContent = '';
             signatureOut.textContent = '';
-            metaOut.innerHTML = '';
+            metaOut.replaceChildren();
         });
         // 输入框 Ctrl+Enter 触发
         input.addEventListener('keydown', (e) => {

@@ -26,14 +26,14 @@
         if (props.length) {
             script += `\n  props: {`;
             props.forEach(p => {
-                const def = p.default ? `, default: ${formatDefault(p.type, p.default)}` : '';
+                const def = p.default ? `, default: ${formatPropDefault(p.type, p.default)}` : '';
                 const req = p.required ? `, required: true` : '';
                 script += `\n    ${p.name}: { type: ${p.type}${def}${req} },`;
             });
             script += `\n  },`;
         }
         script += `\n  data() {\n    return {\n      title: '${cfg.name}',`;
-        datas.forEach(d => script += `\n      ${d.name}: ${formatDefault(d.type, d.default || '')},`);
+        datas.forEach(d => script += `\n      ${d.name}: ${formatStateLiteral(d.type, d.default || '')},`);
         script += `\n    };\n  },`;
 
         if (computeds.length) {
@@ -78,7 +78,7 @@
         if (props.length) {
             script += `\nconst props = defineProps({`;
             props.forEach(p => {
-                const def = p.default ? `, default: ${formatDefault(p.type, p.default)}` : '';
+                const def = p.default ? `, default: ${formatPropDefault(p.type, p.default)}` : '';
                 const req = p.required ? `, required: true` : '';
                 script += `\n  ${p.name}: { type: ${p.type}${def}${req} },`;
             });
@@ -89,9 +89,9 @@
         script += `\nconst title = ref('${cfg.name}');\n`;
         datas.forEach(d => {
             if (d.type === 'Array' || d.type === 'Object') {
-                script += `const ${d.name} = reactive(${formatDefault(d.type, d.default || '')});\n`;
+                script += `const ${d.name} = reactive(${formatStateLiteral(d.type, d.default || '')});\n`;
             } else {
-                script += `const ${d.name} = ref(${formatDefault(d.type, d.default || '')});\n`;
+                script += `const ${d.name} = ref(${formatStateLiteral(d.type, d.default || '')});\n`;
             }
         });
 
@@ -122,17 +122,26 @@
         return s.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
     }
 
-    function formatDefault(type, val) {
+    // State 默认值必须是可直接用于 data 或 reactive 的字面量。
+    function formatStateLiteral(type, val) {
         if (val === '' || val === undefined) {
             if (type === 'String') return "''";
             if (type === 'Number') return '0';
             if (type === 'Boolean') return 'false';
-            if (type === 'Array') return '() => []';
-            if (type === 'Object') return '() => ({})';
+            if (type === 'Array') return '[]';
+            if (type === 'Object') return '{}';
             return 'null';
         }
         if (type === 'String') return `'${val}'`;
         return val;
+    }
+
+    // Array 和 Object 类型的 Prop 使用工厂，避免组件实例共享引用。
+    function formatPropDefault(type, val) {
+        const literal = formatStateLiteral(type, val);
+        if (type === 'Array') return `() => ${literal}`;
+        if (type === 'Object') return `() => (${literal})`;
+        return literal;
     }
 
     function init() {
@@ -211,14 +220,20 @@
 
         btnCopy.addEventListener('click', () => {
             if (!out.value) return;
-            navigator.clipboard.writeText(out.value);
-            if (typeof showToast === 'function') showToast('已复制', 'success');
+            copyToClipboard(out.value);
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // Node 测试通过条件导出访问纯函数，浏览器仍按原流程初始化。
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { buildVue2, buildVue3, formatPropDefault, formatStateLiteral, generate, kebab };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     }
 })();

@@ -9,11 +9,11 @@
     let currentIndex = 0;
     let isPlaying = false;
     let audio = null;
+    let playlistLoadPromise = null;
 
     function init() {
         audio = document.getElementById('audio-player');
         bindEvents();
-        loadRandomPlaylist();
     }
 
     function bindEvents() {
@@ -51,6 +51,7 @@
 
     // 加载随机播放列表
     async function loadRandomPlaylist() {
+        if (!navigator.onLine) return false;
         try {
             // 使用热门歌单ID获取歌曲列表
             // 这里使用网易云音乐的热门歌单
@@ -64,7 +65,12 @@
             
             const randomPlaylistId = playlistIds[Math.floor(Math.random() * playlistIds.length)];
             
-            const response = await fetch(`${API_BASE}?server=netease&type=playlist&id=${randomPlaylistId}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            const response = await fetch(`${API_BASE}?server=netease&type=playlist&id=${randomPlaylistId}`, {
+                signal: controller.signal
+            }).finally(() => clearTimeout(timeoutId));
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data = await response.json();
             
             if (data && data.length > 0) {
@@ -72,13 +78,26 @@
                 playlist = data.sort(() => Math.random() - 0.5).slice(0, 50); // 取前50首
                 currentIndex = 0;
                 loadSong(currentIndex);
+                return true;
             } else {
                 showToast('加载歌曲失败，请稍后重试', 'error');
+                return false;
             }
         } catch (error) {
             console.error('加载播放列表失败:', error);
-            showToast('加载歌曲失败，请检查网络', 'error');
+            if (error.name !== 'AbortError') showToast('加载歌曲失败，请检查网络', 'error');
+            return false;
         }
+    }
+
+    function ensurePlaylistLoaded() {
+        if (playlist.length > 0) return Promise.resolve(true);
+        if (!playlistLoadPromise) {
+            playlistLoadPromise = loadRandomPlaylist().finally(() => {
+                playlistLoadPromise = null;
+            });
+        }
+        return playlistLoadPromise;
     }
 
     // 加载歌曲
@@ -170,12 +189,12 @@
         document.getElementById('progress-fill').style.width = progress + '%';
         
         // 更新时间显示
-        document.getElementById('current-time').textContent = formatTime(audio.currentTime);
+        document.getElementById('music-current-time').textContent = formatTime(audio.currentTime);
     }
 
     // 更新总时长
     function updateDuration() {
-        document.getElementById('total-time').textContent = formatTime(audio.duration);
+        document.getElementById('music-total-time').textContent = formatTime(audio.duration);
     }
 
     // 跳转到指定位置
@@ -207,13 +226,14 @@
     }
 
     // 显示/隐藏播放器
-    function togglePlayer() {
+    async function togglePlayer() {
         const player = document.getElementById('music-player');
         const toggleBtn = document.getElementById('btn-toggle-player');
         
         if (player.style.display === 'none') {
             player.style.display = 'block';
             toggleBtn.style.display = 'none';
+            await ensurePlaylistLoaded();
         }
     }
 

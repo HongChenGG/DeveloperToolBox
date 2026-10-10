@@ -10,8 +10,8 @@
         if (!classMatch) throw new Error('未找到 class 定义');
         const name = classMatch[1];
         const fields = [];
-        // 字段正则:用零宽断言保证 private/protected/public 前是行首/分号/花括号(避免吞掉边界字符导致下一次匹配错位)
-        const fieldRegex = /(?<=^|[\n;{])\s*(?:private|protected|public)\s+(?:static\s+)?(?:final\s+)?(\w+(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?(?:\[\])?)\s+(\w+)\s*(?:=\s*[^;]+)?;/g;
+        // 使用多行行首匹配，兼容 Safari 14 且不消费相邻字段边界。
+        const fieldRegex = /^[ \t]*(?:private|protected|public)[ \t]+(?:static[ \t]+)?(?:final[ \t]+)?([\w.]+(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?(?:\[\])?)[ \t]+(\w+)[ \t]*(?:=\s*[^;]+)?;/gm;
         let m;
         while ((m = fieldRegex.exec(cleanSrc)) !== null) {
             fields.push({ type: m[1], name: m[2] });
@@ -187,14 +187,20 @@
 
         if (btnCopy) btnCopy.addEventListener('click', () => {
             if (!outEl.value) return;
-            navigator.clipboard.writeText(outEl.value);
-            if (typeof showToast === 'function') showToast('已复制', 'success');
+            copyToClipboard(outEl.value);
         });
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
+    // Node 测试通过条件导出访问纯函数，浏览器仍按原流程初始化。
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { cap, generate, parseClass, stripAnnotations };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
+        }
     }
 })();

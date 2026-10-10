@@ -500,12 +500,6 @@ body, html {
     margin-bottom: 10px;
 }
 
-.note-item-title {
-    font-weight: bold;
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
 .note-item-type {
     padding: 5px 12px;
     border-radius: 15px;
@@ -898,33 +892,4 @@ body, html {
         transparent 60%
     );
     pointer-events: none;
-}
-
-/* 歌词样式 */
-.lyric-line {
-    padding: 8px 0;
-    color: var(--text-secondary);
-    transition: all 0.3s ease;
-    font-size: 13px;
-    line-height: 1.8;
-}
-
-.lyric-line.active {
-    color: var(--accent-color);
-    font-weight: bold;
-    font-size: 15px;
-    transform: scale(1.05);
-}
-
-#lyrics-container {
-    scroll-behavior: smooth;
-}
-
-#lyrics-container::-webkit-scrollbar {
-    width: 4px;
-}
-
-#lyrics-container::-webkit-scrollbar-thumb {
-    background: var(--accent-color);
-    border-radius: 2px;
 }

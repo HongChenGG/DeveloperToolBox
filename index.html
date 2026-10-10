@@ -6,7 +6,6 @@
     <title>红尘百宝箱 - Developer Toolbox</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/stars.css">
     <link rel="stylesheet" href="css/modern.css">
     <link rel="stylesheet" href="lib/atom-one-dark.min.css">
     <link rel="stylesheet" href="lib/katex/katex.min.css">
@@ -14,24 +13,6 @@
 <body>
     <!-- Three.js 3D 背景画布 -->
     <canvas id="three-bg-canvas"></canvas>
-    <!-- 星空背景特效（已被 modern.css 隐藏，保留以防回滚） -->
-    <div class="bg-animation">
-        <div class="static-stars"></div>
-        <div class="stars">
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-        </div>
-    </div>
-    <!-- 半透明遮罩，确保内容可读性 -->
-    <div class="overlay"></div>
 
     <!-- SVG 图标定义 (隐藏) -->
     <svg style="display: none;">
@@ -221,7 +202,7 @@
                 <svg><use xlink:href="#icon-box"></use></svg>
                 <span>红尘百宝箱</span>
             </div>
-            <div class="nav-menu" id="nav-menu">
+            <div class="nav-menu" id="nav-menu" role="navigation" aria-label="工具导航">
                 <!-- 分组标题：AI 助手 -->
                 <div style="padding: 8px 20px; font-size: 11px; color: var(--text-secondary); opacity:.65; letter-spacing:1px;">AI 助手</div>
                 <div class="nav-item" data-target="aichat">
@@ -247,10 +228,6 @@
                     <svg><use xlink:href="#icon-qrcode"></use></svg>
                     <span>二维码/条形码</span>
                 </div>
-                <!-- <div class="nav-item" data-target="nff">
-                    <svg><use xlink:href="#icon-grid"></use></svg>
-                    <span>补票号码分解</span>
-                </div> -->
                 <div class="nav-item" data-target="codec">
                     <svg><use xlink:href="#icon-transfer"></use></svg>
                     <span>编码/加密转换</span>
@@ -386,10 +363,6 @@
                     <svg><use xlink:href="#icon-md"></use></svg>
                     <span>Vue 速查文档</span>
                 </div>
-                <div class="nav-item" data-target="euidocs">
-                    <svg><use xlink:href="#icon-class"></use></svg>
-                    <span>ElementUI 文档</span>
-                </div>
             </div>
             <!-- 主题设置按钮 -->
             <div style="padding: 20px; border-top: 1px solid var(--border-color);">
@@ -404,7 +377,6 @@
         <div class="main-content">
             <!-- 顶部标题栏 -->
             <div class="content-header">
-                <div class="content-title" id="page-title">JSON 格式化工具</div>
                 <div id="page-hero"></div>
             </div>
 
@@ -665,70 +637,6 @@
                     </div>
                 </div>
 
-                <!-- 补票号码分解工具面板 -->
-                <div class="tool-page" id="page-nff">
-                    <div class="toolbar">
-                        <button class="btn btn-primary" id="btn-nff-generate" disabled>
-                            <svg><use xlink:href="#icon-magic"></use></svg> 生成 NFF 文件
-                        </button>
-                    </div>
-
-                    <div class="editor-area">
-                        <!-- 左侧：配置与输入 -->
-                        <div class="editor-panel" style="flex: 1;">
-                            <div class="panel-header">
-                                <span>文件与设置</span>
-                            </div>
-                            <div style="padding: 20px; display: flex; flex-direction: column; gap: 20px;">
-                                <!-- 文件上传 -->
-                                <div style="display: flex; align-items: center; gap: 15px;">
-                                    <label for="nff-file-input" class="btn btn-primary" style="margin:0; cursor: pointer; display: inline-flex; align-items: center;">
-                                        <svg style="margin-right: 5px;"><use xlink:href="#icon-copy"></use></svg> 选择文件
-                                        <input type="file" id="nff-file-input" accept=".txt,.nff" style="display: none;">
-                                    </label>
-                                    <span id="nff-file-name" style="color: var(--text-secondary); font-style: italic;">未选择文件</span>
-                                </div>
-
-                                <div style="border-top: 1px solid var(--border-color); margin: 10px 0;"></div>
-
-                                <!-- 参数设置 -->
-                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px;">
-                                    <div>
-                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">行数 (Rows)</div>
-                                        <input type="number" id="nff-rows" value="7" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
-                                    </div>
-                                    <div>
-                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">列数 (Cols)</div>
-                                        <input type="number" id="nff-cols" value="5" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
-                                    </div>
-                                    <div>
-                                        <div style="margin-bottom: 8px; color: var(--text-primary); font-weight: bold;">模板套数</div>
-                                        <input type="number" id="nff-template-num" value="1" min="1" style="width: 100%; padding: 10px; background: var(--bg-dark); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; outline: none;">
-                                    </div>
-                                </div>
-
-                                <!-- 消息提示 -->
-                                <div id="nff-message" style="margin-top: 20px; padding: 15px; border-radius: 4px; display: none; text-align: center; font-weight: bold;"></div>
-                            </div>
-                        </div>
-                        
-                        <!-- 说明区域 -->
-                        <div class="editor-panel" style="flex: 0 0 300px;">
-                            <div class="panel-header">
-                                <span>使用说明</span>
-                            </div>
-                            <div style="padding: 20px; color: var(--text-secondary); line-height: 1.6;">
-                                <p>1. 点击“选择文件”上传包含号码的文本文件 (.txt 或 .nff)。</p>
-                                <p>2. 系统会自动识别文件内容并排序。</p>
-                                <p>3. 设置生成的矩阵行数和列数。</p>
-                                <p>4. 设置“模板套数”，用于控制循环位移。</p>
-                                <p>5. 点击“生成 NFF 文件”即可下载处理后的文件。</p>
-                                <p style="margin-top: 10px; color: var(--accent-color);">注意：生成成功后，模板套数会自动 +1，方便连续操作。</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- 编码/加密转换工具面板 -->
                 <div class="tool-page" id="page-codec" style="flex-direction: column; height: 100%;">
                     <!-- Tab 导航 -->
@@ -913,7 +821,7 @@
 
                                 <div style="background: var(--bg-darker); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color);">
                                     <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">当前时间（北京时间）</div>
-                                    <div id="current-time" style="color: var(--accent-color); font-size: 16px; font-weight: bold; font-family: monospace;">--</div>
+                                    <div id="timestamp-current-time" style="color: var(--accent-color); font-size: 16px; font-weight: bold; font-family: monospace;">--</div>
                                     <div style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">当前时间戳：<span id="current-timestamp" style="color: var(--text-primary); font-family: monospace;">--</span></div>
                                 </div>
                             </div>
@@ -1586,6 +1494,7 @@
                             <option value="chars">按字符</option>
                             <option value="words">按单词</option>
                             <option value="lines" selected>按行</option>
+                            <option value="sentences">按句子</option>
                             <option value="json">JSON 规范化对比</option>
                         </select>
                         <button class="btn btn-primary" id="btn-diff-run"><svg><use xlink:href="#icon-play"></use></svg> 对比</button>
@@ -2006,6 +1915,12 @@
                         <label style="display:flex;align-items:center;gap:6px;color:var(--text-secondary)">
                             <input type="checkbox" id="mb-lombok" checked> 使用 Lombok
                         </label>
+                        <label id="mb-pk-field" style="display:none;align-items:center;gap:0.375rem;color:var(--text-secondary)">
+                            <span class="label-chip">主键</span>
+                            <select id="mb-pk-select" aria-label="选择主键字段">
+                                <option value="">请选择主键字段</option>
+                            </select>
+                        </label>
                         <button class="btn btn-primary" id="btn-mb-gen"><svg><use xlink:href="#icon-play"></use></svg> 生成</button>
                         <button class="btn btn-info" id="btn-mb-sample">载入示例</button>
                         <button class="btn btn-success" id="btn-mb-copy"><svg><use xlink:href="#icon-copy"></use></svg> 复制当前</button>
@@ -2196,7 +2111,7 @@
                             <!-- 右：代码（上） + 预览（下，更大） -->
                             <div style="display:flex;flex-direction:column;gap:10px;min-height:0">
                                 <textarea id="vp-editor" class="code-textarea" spellcheck="false" style="flex:1;min-height:0"></textarea>
-                                <iframe id="vp-preview" style="background:#fff;border-radius:8px;border:1px solid var(--border-color);flex:1.6;min-height:0"></iframe>
+                                <iframe id="vp-preview" data-src="vendor/vue-playground-host.html" sandbox="allow-scripts" title="Vue 2 与 Element UI 组件预览" style="background:#fff;border-radius:8px;border:1px solid var(--border-color);flex:1.6;min-height:0"></iframe>
                             </div>
                         </div>
                     </div>
@@ -2216,18 +2131,6 @@
                     <div style="display:grid;grid-template-columns:200px 1fr;gap:10px;padding:10px;height:calc(100% - 80px);box-sizing:border-box;overflow:hidden">
                         <div id="vd-sidebar" style="background:var(--bg-darker);border-radius:8px;padding:10px;overflow-y:auto"></div>
                         <div id="vd-main" style="background:var(--bg-darker);border-radius:8px;padding:24px 30px;overflow-y:auto;font-size:14px;line-height:1.75"></div>
-                    </div>
-                </div>
-
-                <!-- ElementUI 文档 -->
-                <div class="tool-page" id="page-euidocs">
-                    <div class="toolbar">
-                        <input type="text" id="eui-search" placeholder="🔍 搜索组件..." style="width:280px">
-                        <span style="color:var(--text-secondary);font-size:12px">左侧选组件 → 右侧查看用法、示例与 API 表（Element UI 2.x）</span>
-                    </div>
-                    <div style="display:grid;grid-template-columns:200px 1fr;gap:10px;padding:10px;height:calc(100% - 80px);box-sizing:border-box;overflow:hidden">
-                        <div id="eui-sidebar" style="background:var(--bg-darker);border-radius:8px;padding:10px;overflow-y:auto"></div>
-                        <div id="eui-main" style="background:var(--bg-darker);border-radius:8px;padding:24px 30px;overflow-y:auto;font-size:14px;line-height:1.75"></div>
                     </div>
                 </div>
 
@@ -2259,8 +2162,12 @@
                 <!-- AI 对话 -->
                 <div class="tool-page" id="page-aichat">
                     <div class="toolbar">
+                        <button class="btn btn-info ai-session-drawer-toggle" id="ai-session-drawer-toggle" aria-controls="ai-session-panel" aria-expanded="false">☰ 会话</button>
                         <button class="btn btn-primary" id="ai-btn-new"><svg><use xlink:href="#icon-plus"></use></svg> 新建会话</button>
                         <button class="btn btn-info" id="ai-btn-settings"><svg><use xlink:href="#icon-settings"></use></svg> 设置</button>
+                        <button class="btn btn-info" id="ai-btn-backup-export">备份</button>
+                        <button class="btn btn-info" id="ai-btn-backup-import">恢复</button>
+                        <input type="file" id="ai-backup-file" accept="application/json,.json" hidden>
                         <button class="btn btn-success" id="ai-btn-export"><svg><use xlink:href="#icon-export"></use></svg> 导出 HTML</button>
                         <button class="btn btn-info" id="ai-btn-export-md"><svg><use xlink:href="#icon-export"></use></svg> 导出 MD</button>
                         <button class="btn btn-secondary" id="ai-btn-copy-conv"><svg><use xlink:href="#icon-copy"></use></svg> 复制对话</button>
@@ -2269,7 +2176,14 @@
                     </div>
                     <div class="ai-layout" style="display:grid;grid-template-columns:240px 1fr;gap:10px;padding:10px;height:calc(100% - 80px);box-sizing:border-box;overflow:hidden">
                         <!-- 会话列表 -->
-                        <div id="ai-sessions" style="background:var(--bg-darker);border-radius:8px;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+                        <aside id="ai-session-panel" class="ai-session-panel" aria-label="AI 会话列表">
+                            <div class="ai-session-panel-header">
+                                <input type="search" id="ai-session-search" class="ai-input" placeholder="搜索标题和消息..." aria-label="搜索 AI 会话">
+                                <button type="button" id="ai-session-drawer-close" class="ai-session-drawer-close" aria-label="关闭会话列表">×</button>
+                            </div>
+                            <div id="ai-sessions" style="overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0"></div>
+                        </aside>
+                        <button type="button" id="ai-session-drawer-backdrop" class="ai-session-drawer-backdrop" aria-label="关闭会话列表"></button>
                         <!-- 聊天主区 -->
                         <div style="display:flex;flex-direction:column;background:var(--bg-darker);border-radius:8px;overflow:hidden;min-height:0">
                             <!-- 多模型选择条（Cursor 风格胶囊） -->
@@ -2278,10 +2192,13 @@
                             <div style="border-top:1px solid var(--border-color);padding:12px;background:var(--bg-panel)">
                                 <div id="ai-edit-hint" style="display:none;align-items:center;gap:8px;margin-bottom:8px;padding:6px 10px;border-radius:6px;background:var(--bg-darker);border:1px solid var(--accent-color);font-size:11px;color:var(--text-secondary)"></div>
                                 <div id="ai-image-preview" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+                                <div id="ai-local-file-list" class="ai-local-file-list" style="display:none"></div>
                                 <div style="display:flex;gap:8px;align-items:flex-end">
                                     <textarea id="ai-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴/上传图片..." style="flex:1;min-height:48px;max-height:200px;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary);font-size:14px;resize:vertical;font-family:inherit"></textarea>
                                     <input type="file" id="ai-image-file" accept="image/*" multiple style="display:none">
+                                    <input type="file" id="ai-local-file-input" accept=".txt,.md,.json,.js,.jsx,.ts,.tsx,.java,.py,.sql,.xml,.yaml,.yml,.properties,.css,.html,.vue" multiple hidden>
                                     <button id="ai-btn-image" class="btn" title="上传图片（也可直接 Ctrl+V 粘贴截图）" style="height:48px;min-width:48px">🖼️</button>
+                                    <button id="ai-btn-local-files" class="btn" title="添加本轮文本文件" style="height:48px;min-width:48px">📎</button>
                                     <button id="ai-btn-send" class="btn btn-primary" style="height:48px;min-width:80px">
                                         <svg><use xlink:href="#icon-send"></use></svg> 发送
                                     </button>
@@ -2293,7 +2210,7 @@
                                     <span id="ai-model-tip">模型：未配置</span>
                                     <span style="display:flex;align-items:center;gap:6px">
                                         <span class="ai-skill-badge" id="ai-skill-badge" style="display:none"></span>
-                                        <span id="ai-token-tip"></span>
+                                        <span id="ai-context-budget">上下文估算：约 0 tokens · 图片 0 张</span>
                                     </span>
                                 </div>
                             </div>
@@ -2331,8 +2248,8 @@
                     <label class="ai-label">快速预设（应用于当前模型）</label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
                         <button class="btn btn-info ai-preset" data-preset="ollama">Ollama 本地</button>
-                        <button class="btn btn-info ai-preset" data-preset="deepseek">DeepSeek 中转</button>
-                        <button class="btn btn-info ai-preset" data-preset="oneapi">OneAPI / NewAPI</button>
+                        <button class="btn btn-info ai-preset" data-preset="deepseek" data-network-only>DeepSeek 中转</button>
+                        <button class="btn btn-info ai-preset" data-preset="oneapi" data-network-only>OneAPI / NewAPI</button>
                         <button class="btn btn-info ai-preset" data-preset="custom">自定义</button>
                     </div>
                     <div style="margin-top:6px;font-size:11px;color:var(--text-secondary)">点击预设自动填充地址，再根据需要调整</div>
@@ -2358,8 +2275,25 @@
                     <select id="ai-cfg-model-select" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary)"></select>
                 </div>
 
+                <div class="ai-capability-grid">
+                    <label><input type="checkbox" id="ai-cfg-supports-reasoning"> 支持推理参数</label>
+                    <label><input type="checkbox" id="ai-cfg-reasoning-effort-enabled"> 发送 reasoning_effort</label>
+                    <label><input type="checkbox" id="ai-cfg-supports-vision" checked> 支持图片输入</label>
+                    <label><input type="checkbox" id="ai-cfg-supports-tools"> 支持 Tool Calling</label>
+                    <label class="ai-capability-field">模型最大输出 Tokens
+                        <input type="number" id="ai-cfg-max-output-tokens" class="ai-input" value="32768" min="1" max="1048576">
+                    </label>
+                    <label class="ai-capability-field">Token 参数名
+                        <select id="ai-cfg-token-parameter-mode" class="ai-input">
+                            <option value="max_tokens">max_tokens</option>
+                            <option value="max_completion_tokens">max_completion_tokens</option>
+                            <option value="none">不发送</option>
+                        </select>
+                    </label>
+                </div>
+
                 <!-- 联网搜索（按模型独立配置） -->
-                <div style="margin-bottom:14px;padding:10px 12px;border:1px dashed var(--border-color);border-radius:8px;background:linear-gradient(90deg, rgba(102,126,234,0.06), transparent 80%)">
+                <div id="ai-web-settings" data-network-only style="margin-bottom:14px;padding:10px 12px;border:1px dashed var(--border-color);border-radius:8px;background:linear-gradient(90deg, rgba(102,126,234,0.06), transparent 80%)">
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
                         <input type="checkbox" id="ai-cfg-web-enabled"> <span>🌐 启用联网搜索（function calling）</span>
                     </label>
@@ -2429,7 +2363,7 @@
                             <option value="">不发送（服务端默认）</option>
                             <option value="none">none — 关闭</option>
                             <option value="low">low</option>
-                            <option value="medium" selected>medium</option>
+                            <option value="medium">medium</option>
                             <option value="high">high</option>
                             <option value="xhigh">xhigh</option>
                             <option value="max">max</option>
@@ -2489,12 +2423,42 @@
                 </div>
 
                 <div style="background:var(--bg-darker);padding:10px 12px;border-radius:6px;font-size:11px;color:var(--text-secondary);line-height:1.7">
-                    💡 <b>提示</b>：所有设置都保存在本地浏览器（localStorage），刷新不丢；API Key 仅本地存储，不会上传到任何服务器。
+                    💡 <b>提示</b>：设置保存在当前浏览器。API Key 会作为 Authorization 请求头发送到你配置的模型服务；对话、图片、系统提示词和已启用 Skills 也会发送到该服务。共享设备请及时清除 Key。
                 </div>
             </div>
             <div style="padding:14px 25px;border-top:2px solid var(--border-color);display:flex;justify-content:flex-end;gap:10px;background:var(--bg-darker)">
                 <button id="ai-btn-cancel-settings" class="btn btn-warning">取消</button>
                 <button id="ai-btn-save-settings" class="btn btn-primary">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 备份导入确认 -->
+    <div id="ai-backup-dialog" class="ai-dialog-mask" style="display:none" role="dialog" aria-modal="true" aria-labelledby="ai-backup-dialog-title">
+        <div class="ai-dialog-card">
+            <h3 id="ai-backup-dialog-title">恢复 AI 数据</h3>
+            <div id="ai-backup-summary" class="ai-dialog-summary"></div>
+            <label><input type="radio" name="ai-backup-mode" id="ai-backup-mode-merge" value="merge" checked> 合并到现有数据</label>
+            <label><input type="radio" name="ai-backup-mode" id="ai-backup-mode-overwrite" value="overwrite"> 覆盖现有数据</label>
+            <label><input type="checkbox" id="ai-backup-include-keys"> 导出时包含 API Key（存在共享风险）</label>
+            <div class="ai-dialog-actions">
+                <button type="button" class="btn btn-warning" id="ai-backup-cancel">取消</button>
+                <button type="button" class="btn btn-primary" id="ai-backup-confirm">确认恢复</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 工具域名审批 -->
+    <div id="ai-domain-approval-dialog" class="ai-dialog-mask" style="display:none" role="dialog" aria-modal="true" aria-labelledby="ai-domain-approval-title">
+        <div class="ai-dialog-card">
+            <h3 id="ai-domain-approval-title">允许 AI 访问新域名？</h3>
+            <p id="ai-domain-approval-host" class="ai-domain-host"></p>
+            <p id="ai-domain-approval-url" class="ai-domain-url"></p>
+            <div class="ai-dialog-actions ai-domain-actions">
+                <button type="button" class="btn btn-info" id="ai-domain-allow-once">允许一次</button>
+                <button type="button" class="btn btn-info" id="ai-domain-allow-session">本会话允许</button>
+                <button type="button" class="btn btn-primary" id="ai-domain-allow-always">始终允许</button>
+                <button type="button" class="btn btn-danger" id="ai-domain-deny">拒绝</button>
             </div>
         </div>
     </div>
@@ -2630,8 +2594,8 @@
         
         <div style="margin-bottom: 15px;">
             <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-secondary); margin-bottom: 5px;">
-                <span id="current-time">0:00</span>
-                <span id="total-time">0:00</span>
+                <span id="music-current-time">0:00</span>
+                <span id="music-total-time">0:00</span>
             </div>
             <div style="width: 100%; height: 6px; background: var(--bg-darker); border-radius: 3px; cursor: pointer; overflow: hidden;" id="progress-bar">
                 <div id="progress-fill" style="height: 100%; background: var(--accent-color); width: 0%; transition: width 0.1s;"></div>
@@ -2680,6 +2644,8 @@
     <script src="lib/marked.min.js"></script>
     <script src="lib/katex/katex.min.js"></script>
     <script src="lib/highlight.min.js"></script>
+    <!-- 统一安全渲染边界 -->
+    <script src="js/security.js"></script>
     <!-- 3D 背景动画 -->
     <script src="js/three-bg.js"></script>
     <!-- 应用逻辑 -->
@@ -2716,8 +2682,8 @@
     <script src="js/vue-playground-docs.js"></script>
     <script src="js/vue-playground.js"></script>
     <script src="js/vue-docs.js"></script>
-    <script src="js/eui-docs.js"></script>
     <!-- AI 助手 -->
+    <script src="js/ai-chat-core.js"></script>
     <script src="js/ai-chat.js"></script>
     <!-- 备忘录提醒 -->
     <script src="js/reminder.js"></script>

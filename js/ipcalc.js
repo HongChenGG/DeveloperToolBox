@@ -1,5 +1,75 @@
 // IP / CIDR 网络计算器
 (function() {
+    const IPV4_MAX_INTEGER = 4294967295n;
+
+    function parseIpv4Address(text) {
+        const normalizedText = String(text ?? '').trim();
+        if (!/^\d+\.\d+\.\d+\.\d+$/.test(normalizedText)) throw new Error('IP 格式错误');
+
+        let integer = 0n;
+        for (const octetText of normalizedText.split('.')) {
+            const octet = Number(octetText);
+            if (!Number.isInteger(octet) || octet < 0 || octet > 255) throw new Error('IP 格式错误');
+            integer = (integer << 8n) | BigInt(octet);
+        }
+        return integer;
+    }
+
+    function parseIpv4Integer(value) {
+        let integer;
+        if (typeof value === 'bigint') {
+            integer = value;
+        } else if (typeof value === 'number') {
+            if (!Number.isSafeInteger(value)) throw new Error('IPv4 整数格式错误');
+            integer = BigInt(value);
+        } else {
+            const normalizedText = String(value ?? '').trim();
+            if (!/^(?:0[xX][0-9A-Fa-f]+|\d+)$/.test(normalizedText)) {
+                throw new Error('IPv4 整数格式错误');
+            }
+            integer = BigInt(normalizedText);
+        }
+
+        if (integer < 0n || integer > IPV4_MAX_INTEGER) throw new Error('IPv4 整数超出范围');
+        return integer;
+    }
+
+    function formatIpv4Integer(value) {
+        const integer = parseIpv4Integer(value);
+        return [24n, 16n, 8n, 0n]
+            .map(shift => Number((integer >> shift) & 255n))
+            .join('.');
+    }
+
+    function summarizeIpv4Range(startAddress, endAddress, maximumCidrs = 4096) {
+        const start = parseIpv4Address(startAddress);
+        const end = parseIpv4Address(endAddress);
+        if (start > end) throw new Error('起始 IP 大于结束 IP');
+        if (!Number.isInteger(maximumCidrs) || maximumCidrs <= 0) throw new Error('CIDR 结果上限无效');
+
+        const cidrs = [];
+        let current = start;
+        while (current <= end) {
+            let blockSize = current === 0n ? 1n << 32n : current & -current;
+            const remainingAddresses = end - current + 1n;
+            while (blockSize > remainingAddresses) blockSize >>= 1n;
+
+            const prefixLength = 32 - (blockSize.toString(2).length - 1);
+            cidrs.push(`${formatIpv4Integer(current)}/${prefixLength}`);
+            if (cidrs.length > maximumCidrs) {
+                throw new Error(`CIDR 结果超过 ${maximumCidrs} 条，请缩小 IP 范围`);
+            }
+            current += blockSize;
+        }
+
+        return {
+            start,
+            end,
+            count: end - start + 1n,
+            cidrs
+        };
+    }
+
     function init() {
         const cidrInput = document.getElementById('ip-cidr-input');
         if (!cidrInput) return;
@@ -13,12 +83,10 @@
         const btnConv = document.getElementById('btn-ip-conv');
 
         function ipToInt(ip) {
-            const p = ip.split('.').map(Number);
-            if (p.length !== 4 || p.some(n => isNaN(n) || n < 0 || n > 255)) throw new Error('IP 格式错误');
-            return (p[0] << 24 >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3];
+            return Number(parseIpv4Address(ip));
         }
         function intToIp(n) {
-            return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff].join('.');
+            return formatIpv4Integer(n);
         }
         function row(label, val) {
             return `<div style="display:flex;padding:6px 10px;background:var(--bg-darker);border-radius:4px;margin-bottom:4px;font-family:monospace;font-size:13px">
@@ -71,31 +139,14 @@
         function calcRange() {
             try {
                 const text = rangeInput.value.trim();
-                const m = text.match(/^([\d.]+)\s*-\s*([\d.]+)$/);
-                if (!m) throw new Error('请输入 IP 范围，如 192.168.1.0-192.168.1.255');
-                const a = ipToInt(m[1]), b = ipToInt(m[2]);
-                if (a > b) throw new Error('起始 IP 大于结束 IP');
-                const count = b - a + 1;
-                // 求最小 CIDR 集合
-                const cidrs = [];
-                let cur = a;
-                while (cur <= b) {
-                    let maxSize = 32;
-                    while (maxSize > 0) {
-                        const mask = maxSize === 0 ? 0 : (0xffffffff << (32 - maxSize + 1)) >>> 0;
-                        if ((cur & mask) !== cur) break;
-                        if ((cur + Math.pow(2, 32 - maxSize + 1) - 1) > b) break;
-                        maxSize--;
-                    }
-                    cidrs.push(intToIp(cur) + '/' + maxSize);
-                    cur += Math.pow(2, 32 - maxSize);
-                    if (cur > 0xffffffff) break;
-                }
+                const match = text.match(/^([\d.]+)\s*-\s*([\d.]+)$/);
+                if (!match) throw new Error('请输入 IP 范围，如 192.168.1.0-192.168.1.255');
+                const summary = summarizeIpv4Range(match[1], match[2]);
                 rangeOut.innerHTML =
-                    row('起始 IP', intToIp(a)) +
-                    row('结束 IP', intToIp(b)) +
-                    row('IP 数量', count.toLocaleString()) +
-                    row('最小 CIDR 集合', cidrs.join('<br>'));
+                    row('起始 IP', formatIpv4Integer(summary.start)) +
+                    row('结束 IP', formatIpv4Integer(summary.end)) +
+                    row('IP 数量', summary.count.toLocaleString()) +
+                    row('最小 CIDR 集合', summary.cidrs.join('<br>'));
             } catch (e) {
                 rangeOut.innerHTML = '<span style="color:var(--danger-color)">' + e.message + '</span>';
             }
@@ -105,13 +156,10 @@
             try {
                 const text = convInput.value.trim();
                 let ip;
-                if (text.includes('.')) ip = ipToInt(text);
-                else if (/^0x/.test(text)) ip = parseInt(text, 16) >>> 0;
-                else if (/^\d+$/.test(text)) ip = parseInt(text) >>> 0;
-                else throw new Error('无法识别格式');
-                if (ip > 0xffffffff) throw new Error('超出 IPv4 范围');
+                if (text.includes('.')) ip = parseIpv4Address(text);
+                else ip = parseIpv4Integer(text);
                 convOut.innerHTML =
-                    row('点分十进制', intToIp(ip)) +
+                    row('点分十进制', formatIpv4Integer(ip)) +
                     row('十进制整数', ip.toString()) +
                     row('十六进制', '0x' + ip.toString(16).toUpperCase().padStart(8, '0')) +
                     row('二进制', ip.toString(2).padStart(32, '0').match(/.{8}/g).join('.'));
@@ -127,6 +175,18 @@
         rangeInput && rangeInput.addEventListener('keydown', e => { if (e.key === 'Enter') calcRange(); });
         convInput && convInput.addEventListener('keydown', e => { if (e.key === 'Enter') calcConv(); });
     }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            formatIpv4Integer,
+            parseIpv4Address,
+            parseIpv4Integer,
+            summarizeIpv4Range
+        };
+    }
+
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+        else init();
+    }
 })();

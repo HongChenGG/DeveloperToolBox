@@ -63,13 +63,17 @@
         const fieldDefs = splitTopLevelComma(body);
 
         const cols = [];
-        let pk = null;
+        const primaryKeys = [];
         fieldDefs.forEach(line => {
             line = line.trim();
             if (!line) return;
-            if (/^PRIMARY\s+KEY/i.test(line)) {
-                const m = line.match(/PRIMARY\s+KEY\s*\(\s*[`"\[]?(\w+)/i);
-                if (m) pk = m[1];
+
+            // 表级主键可以包含约束名和多个字段。
+            const tablePrimaryKeyMatch = line.match(/PRIMARY\s+KEY\s*\(([^)]+)\)/i);
+            if (tablePrimaryKeyMatch && /^(?:CONSTRAINT\b[\s\S]*?\s+)?PRIMARY\s+KEY/i.test(line)) {
+                splitTopLevelComma(tablePrimaryKeyMatch[1]).forEach(primaryKey => {
+                    primaryKeys.push(primaryKey.trim().replace(/^[`"\[]+|[`"\]]+$/g, ''));
+                });
                 return;
             }
             if (/^(UNIQUE|KEY|INDEX|CONSTRAINT|FOREIGN|CHECK)/i.test(line)) return;
@@ -80,12 +84,11 @@
                 const isAutoInc = /AUTO_INCREMENT|IDENTITY/i.test(line);
                 const comment = (line.match(/COMMENT\s+['"]([^'"]+)['"]/i) || [])[1] || '';
                 cols.push({ name, type, isAutoInc, comment });
-                if (isAutoInc) pk = pk || name;
+                if (/\bPRIMARY\s+KEY\b/i.test(line)) primaryKeys.push(name);
             }
         });
 
-        if (!pk && cols.length) pk = cols[0].name;
-        return { table, cols, pk };
+        return { table, cols, primaryKeys: [...new Set(primaryKeys)] };
     }
 
     // 按顶层逗号切分(忽略嵌套括号和字符串字面量)
@@ -270,12 +273,54 @@
         if (!ddl) return;
         const pkg = document.getElementById('mb-pkg');
         const lombok = document.getElementById('mb-lombok');
+        const primaryKeyField = document.getElementById('mb-pk-field');
+        const primaryKeySelect = document.getElementById('mb-pk-select');
         const tabs = document.querySelectorAll('.mb-tab');
         const out = document.getElementById('mb-out');
         const btn = document.getElementById('btn-mb-gen');
         const btnCopy = document.getElementById('btn-mb-copy');
         const btnSample = document.getElementById('btn-mb-sample');
         let results = {};
+
+        // 仅在 DDL 没有主键时展示人工选择，并保留仍有效的旧选择。
+        function updatePrimaryKeySelector(info) {
+            if (!primaryKeyField || !primaryKeySelect) return;
+            if (info.primaryKeys.length !== 0) {
+                primaryKeyField.style.display = 'none';
+                primaryKeySelect.value = '';
+                return;
+            }
+
+            const previousSelection = primaryKeySelect.value;
+            primaryKeySelect.replaceChildren();
+
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = '请选择主键字段';
+            primaryKeySelect.appendChild(placeholderOption);
+
+            info.cols.forEach(column => {
+                const option = document.createElement('option');
+                option.value = column.name;
+                option.textContent = column.name;
+                primaryKeySelect.appendChild(option);
+            });
+
+            if (info.cols.some(column => column.name === previousSelection)) {
+                primaryKeySelect.value = previousSelection;
+            }
+            primaryKeyField.style.display = 'flex';
+        }
+
+        function refreshPrimaryKeySelector() {
+            try {
+                updatePrimaryKeySelector(parseDDL(ddl.value));
+            } catch (error) {
+                if (primaryKeyField) primaryKeyField.style.display = 'none';
+            }
+        }
+
+        ddl.addEventListener('input', refreshPrimaryKeySelector);
 
         btnSample.addEventListener('click', () => {
             ddl.value = `CREATE TABLE user (
@@ -289,17 +334,29 @@
   update_time DATETIME COMMENT '更新时间',
   PRIMARY KEY (id)
 ) ENGINE=InnoDB COMMENT='用户表';`;
+            refreshPrimaryKeySelector();
         });
 
         btn.addEventListener('click', () => {
             try {
                 const info = parseDDL(ddl.value);
+                updatePrimaryKeySelector(info);
+
+                if (info.primaryKeys.length > 1) {
+                    throw new Error(`检测到复合主键：${info.primaryKeys.join(', ')}；暂不支持生成按 ID 操作`);
+                }
+
+                const selectedPrimaryKey = info.primaryKeys[0] || primaryKeySelect?.value;
+                if (!selectedPrimaryKey) throw new Error('请选择主键字段后再生成');
+
+                // 生成函数沿用单主键结构，解析结果仍保持 primaryKeys 数组接口。
+                const generationInfo = { ...info, pk: selectedPrimaryKey };
                 const p = pkg.value.trim() || 'com.example';
                 results = {
-                    entity: genEntity(p, info, lombok.checked),
-                    xml: genMapperXml(p, info),
-                    mapper: genMapperJava(p, info),
-                    service: genService(p, info)
+                    entity: genEntity(p, generationInfo, lombok.checked),
+                    xml: genMapperXml(p, generationInfo),
+                    mapper: genMapperJava(p, generationInfo),
+                    service: genService(p, generationInfo)
                 };
                 showTab('entity');
                 if (typeof showToast === 'function') showToast('生成成功', 'success');
@@ -317,10 +374,15 @@
 
         btnCopy.addEventListener('click', () => {
             if (!out.value) return;
-            navigator.clipboard.writeText(out.value);
-            if (typeof showToast === 'function') showToast('已复制', 'success');
+            copyToClipboard(out.value);
         });
     }
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { parseDDL };
+    }
+
+    if (typeof document === 'undefined') return;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

@@ -8,58 +8,63 @@
         const btnExportHtml = document.getElementById('btn-md-export-html');
         const btnExportMd = document.getElementById('btn-md-export-md');
         const btnClear = document.getElementById('btn-md-clear');
+        let renderedHtml = '';
 
-        function escapeHtml(s) {
-            return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        function showRenderError(error) {
+            const errorMessage = document.createElement('p');
+            errorMessage.style.color = 'var(--danger-color)';
+            errorMessage.textContent = `渲染失败: ${error.message}`;
+            preview.replaceChildren(errorMessage);
         }
 
         function render() {
-            if (typeof marked === 'undefined') {
-                preview.innerHTML = '<p style="color:red">marked.min.js 未加载</p>';
+            if (typeof marked === 'undefined' || typeof ToolboxSecurity === 'undefined') {
+                showRenderError(new Error('Markdown 安全渲染依赖未加载'));
                 return;
             }
+
             try {
-                // 配置 marked
-                if (marked.setOptions) marked.setOptions({ gfm: true, breaks: true });
-                let html = marked.parse(input.value);
-                // 简单消毒：移除 script、on*=、javascript:
-                html = html.replace(/<script[\s\S]*?<\/script>/gi, '')
-                           .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
-                           .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
-                           .replace(/javascript:/gi, '');
-                preview.innerHTML = html;
-            } catch (e) {
-                preview.innerHTML = '<p style="color:red">渲染失败: ' + escapeHtml(e.message) + '</p>';
+                renderedHtml = ToolboxSecurity.renderMarkdown(input.value, { markedApi: marked });
+                preview.innerHTML = renderedHtml;
+            } catch (error) {
+                renderedHtml = '';
+                showRenderError(error);
             }
+        }
+
+        function downloadBlob(contentValue, mimeType, fileName) {
+            const blob = new Blob([contentValue], { type: mimeType });
+            const objectUrl = URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = objectUrl;
+            downloadLink.download = fileName;
+            downloadLink.click();
+            URL.revokeObjectURL(objectUrl);
         }
 
         input.addEventListener('input', render);
         btnCopyHtml && btnCopyHtml.addEventListener('click', () => {
-            navigator.clipboard.writeText(preview.innerHTML).then(() => showToast && showToast('HTML 已复制', 'success'));
+            copyToClipboard(renderedHtml);
         });
         btnExportHtml && btnExportHtml.addEventListener('click', () => {
             const full = `<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="UTF-8"><title>Markdown Export</title>
-<style>body{max-width:820px;margin:40px auto;padding:20px;font-family:-apple-system,Segoe UI,sans-serif;line-height:1.7;color:#24292e}
-pre{background:#f6f8fa;padding:16px;border-radius:6px;overflow:auto}code{background:#f6f8fa;padding:2px 6px;border-radius:3px;font-family:Consolas,monospace}
-table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe2e5;padding:8px 12px}th{background:#f6f8fa}
-blockquote{border-left:4px solid #dfe2e5;padding:0 16px;color:#6a737d;margin:0}
+<style>body{max-width:52rem;margin:2.5rem auto;padding:1.25rem;font-family:-apple-system,Segoe UI,sans-serif;line-height:1.7;color:#24292e}
+pre{background:#f6f8fa;padding:1rem;border-radius:.4rem;overflow:auto}code{background:#f6f8fa;padding:.125rem .375rem;border-radius:.2rem;font-family:Consolas,monospace}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #dfe2e5;padding:.5rem .75rem}th{background:#f6f8fa}
+blockquote{border-left:.25rem solid #dfe2e5;padding:0 1rem;color:#6a737d;margin:0}
 h1,h2{border-bottom:1px solid #eaecef;padding-bottom:.3em}</style></head>
-<body>${preview.innerHTML}</body></html>`;
-            const blob = new Blob([full], { type: 'text/html' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'markdown-' + Date.now() + '.html';
-            a.click();
+<body>${renderedHtml}</body></html>`;
+            downloadBlob(full, 'text/html;charset=utf-8', 'markdown-' + Date.now() + '.html');
         });
         btnExportMd && btnExportMd.addEventListener('click', () => {
-            const blob = new Blob([input.value], { type: 'text/markdown' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'document-' + Date.now() + '.md';
-            a.click();
+            downloadBlob(input.value, 'text/markdown;charset=utf-8', 'document-' + Date.now() + '.md');
         });
-        btnClear && btnClear.addEventListener('click', () => { input.value = ''; preview.innerHTML = ''; });
+        btnClear && btnClear.addEventListener('click', () => {
+            input.value = '';
+            renderedHtml = '';
+            preview.replaceChildren();
+        });
 
         // 默认演示内容
         if (!input.value) {

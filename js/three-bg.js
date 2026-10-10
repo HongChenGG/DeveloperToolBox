@@ -30,6 +30,13 @@
         const canvas = document.getElementById('three-bg-canvas');
         if (!canvas) return;
 
+        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            canvas.setAttribute('data-three-state', 'reduced-motion');
+            return;
+        }
+
+        try {
+
         const accent = parseHex(getAccentColor());
 
         // 场景
@@ -126,12 +133,17 @@
         // 自定义事件，theme.js 可触发
         window.addEventListener('theme-changed', updateColors);
 
+        canvas.setAttribute('data-three-state', 'running');
         animate();
+        } catch (error) {
+            canvas.hidden = true;
+            canvas.setAttribute('data-three-state', 'unavailable');
+            console.warn('Three.js 背景初始化失败，已切换为静态背景:', error);
+        }
     }
 
     function updateColors() {
         const accent = parseHex(getAccentColor());
-        const c = new THREE.Color(accent);
         // 更新几何体
         shapes.forEach(s => s.material.color.set(accent));
         // 更新粒子颜色
@@ -190,9 +202,6 @@
 
         renderer.render(scene, camera);
     }
-
-    // 暴露刷新接口给 theme.js
-    window.refreshThreeBg = updateColors;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

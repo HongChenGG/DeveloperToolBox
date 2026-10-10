@@ -16,6 +16,10 @@
         '十六进制颜色': '^#?([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$'
     };
 
+    const WORKER_TIMEOUT_MILLISECONDS = 500;
+    const WORKER_TEXT_LIMIT_BYTES = 1024 * 1024;
+    const textEncoder = new TextEncoder();
+
     function init() {
         const pattern = document.getElementById('regex-pattern');
         if (!pattern) return;
@@ -25,83 +29,182 @@
         const highlight = document.getElementById('regex-highlight');
         const preset = document.getElementById('regex-preset');
         const btnClear = document.getElementById('btn-regex-clear');
+        const btnRun = document.createElement('button');
+        let activeWorker = null;
+        let activeTimeoutId = null;
+        let activeRequestId = 0;
+        let fallbackOnly = window.location.protocol === 'file:';
+
+        // Worker 不可用时需要显式按钮触发，避免输入期间同步执行危险正则。
+        btnRun.id = 'btn-regex-run';
+        btnRun.type = 'button';
+        btnRun.className = 'btn btn-primary';
+        btnRun.textContent = '执行';
+        preset.closest('.toolbar').insertBefore(btnRun, btnClear);
 
         // 填充预设
-        Object.keys(PRESETS).forEach(k => {
+        Object.keys(PRESETS).forEach(name => {
             const opt = document.createElement('option');
-            opt.value = PRESETS[k];
-            opt.textContent = k;
+            opt.value = PRESETS[name];
+            opt.textContent = name;
             preset.appendChild(opt);
         });
         preset.addEventListener('change', () => {
             if (preset.value) {
                 pattern.value = preset.value;
-                run();
+                run(false);
             }
         });
 
-        function escapeHtml(s) {
-            return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        function escapeHtml(value) {
+            return value.replace(/[&<>"']/g, character => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[character]));
         }
 
-        function run() {
-            const p = pattern.value;
-            const t = text.value;
-            const f = flags.value;
-            if (!p) {
-                result.innerHTML = '<span style="color:var(--text-secondary)">请输入正则表达式</span>';
-                highlight.innerHTML = escapeHtml(t);
-                return;
+        function getUtf8Size(value) {
+            return textEncoder.encode(value).byteLength;
+        }
+
+        function stopActiveWorker() {
+            if (activeTimeoutId !== null) {
+                clearTimeout(activeTimeoutId);
+                activeTimeoutId = null;
             }
-            let re;
-            try { re = new RegExp(p, f); }
-            catch (e) {
-                result.innerHTML = '<span style="color:var(--danger-color)">正则错误: ' + escapeHtml(e.message) + '</span>';
-                return;
+            if (activeWorker) {
+                activeWorker.terminate();
+                activeWorker = null;
             }
-            // 高亮匹配
+        }
+
+        function beginRequest() {
+            activeRequestId += 1;
+            stopActiveWorker();
+            return activeRequestId;
+        }
+
+        function renderError(message) {
+            result.innerHTML = '<span style="color:var(--danger-color)">' + escapeHtml(message) + '</span>';
+        }
+
+        function renderMatches(textValue, matches, truncated = false) {
             let html = '';
-            let lastIdx = 0;
-            const matches = [];
-            if (f.includes('g')) {
-                let m;
-                const reG = new RegExp(p, f);
-                while ((m = reG.exec(t)) !== null) {
-                    matches.push({ index: m.index, match: m[0], groups: m.slice(1) });
-                    if (m.index === reG.lastIndex) reG.lastIndex++;
-                }
-            } else {
-                const m = re.exec(t);
-                if (m) matches.push({ index: m.index, match: m[0], groups: m.slice(1) });
-            }
-            matches.forEach(m => {
-                html += escapeHtml(t.slice(lastIdx, m.index));
-                html += `<mark style="background:var(--warning-color);color:#000;padding:0 2px;border-radius:2px">${escapeHtml(m.match)}</mark>`;
-                lastIdx = m.index + m.match.length;
+            let lastIndex = 0;
+
+            matches.forEach(match => {
+                html += escapeHtml(textValue.slice(lastIndex, match.index));
+                html += `<mark style="background:var(--warning-color);color:#000;padding:0 2px;border-radius:2px">${escapeHtml(match.match)}</mark>`;
+                lastIndex = match.index + match.match.length;
             });
-            html += escapeHtml(t.slice(lastIdx));
+            html += escapeHtml(textValue.slice(lastIndex));
             highlight.innerHTML = html || '<span style="color:var(--text-secondary)">无文本</span>';
 
-            // 结果列表
             if (matches.length === 0) {
                 result.innerHTML = '<span style="color:var(--danger-color)">未匹配</span>';
-            } else {
-                const list = matches.map((m, i) => {
-                    let s = `<div style="margin-bottom:6px;padding:6px;background:var(--bg-darker);border-radius:4px">
-                        <b>#${i + 1}</b> 位置 ${m.index}: <code style="color:var(--accent-color)">${escapeHtml(m.match)}</code>`;
-                    if (m.groups.length) {
-                        s += '<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">分组: ' +
-                            m.groups.map((g, j) => `[${j + 1}]=${g === undefined ? '<i>undefined</i>' : '<code>' + escapeHtml(g) + '</code>'}`).join(' | ') + '</div>';
-                    }
-                    s += '</div>';
-                    return s;
-                }).join('');
-                result.innerHTML = `<div style="color:var(--success-color);font-weight:bold;margin-bottom:8px">✓ 匹配到 ${matches.length} 处</div>` + list;
+                return;
+            }
+
+            const list = matches.map((match, matchIndex) => {
+                let item = `<div style="margin-bottom:6px;padding:6px;background:var(--bg-darker);border-radius:4px">
+                    <b>#${matchIndex + 1}</b> 位置 ${match.index}: <code style="color:var(--accent-color)">${escapeHtml(match.match)}</code>`;
+                if (match.groups.length) {
+                    item += '<div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">分组: ' +
+                        match.groups.map((group, groupIndex) => `[${groupIndex + 1}]=${group === undefined ? '<i>undefined</i>' : '<code>' + escapeHtml(group) + '</code>'}`).join(' | ') + '</div>';
+                }
+                item += '</div>';
+                return item;
+            }).join('');
+            const summaryText = `${truncated ? '结果已截断 · ' : ''}✓ 匹配到 ${matches.length} 处`;
+            const summaryColor = truncated ? 'var(--warning-color)' : 'var(--success-color)';
+            result.innerHTML = `<div style="color:${summaryColor};font-weight:bold;margin-bottom:8px">${summaryText}</div>` + list;
+        }
+
+        function renderWorkerUnavailable() {
+            highlight.textContent = text.value;
+            renderError('Worker 不可用，请通过本地 HTTP 服务器打开工具箱后重试');
+        }
+
+        function run(triggeredByButton) {
+            if (fallbackOnly && !triggeredByButton) return;
+
+            const patternValue = pattern.value;
+            const textValue = text.value;
+            const flagsValue = flags.value;
+            const requestId = beginRequest();
+
+            if (!patternValue) {
+                result.innerHTML = '<span style="color:var(--text-secondary)">请输入正则表达式</span>';
+                highlight.innerHTML = escapeHtml(textValue);
+                return;
+            }
+
+            if (fallbackOnly) {
+                renderWorkerUnavailable();
+                return;
+            }
+
+            if (getUtf8Size(textValue) > WORKER_TEXT_LIMIT_BYTES) {
+                renderError('测试文本不能超过 1 MiB');
+                return;
+            }
+
+            let worker;
+            try {
+                worker = new Worker('js/regex-worker.js');
+            } catch (error) {
+                fallbackOnly = true;
+                stopActiveWorker();
+                renderWorkerUnavailable();
+                return;
+            }
+
+            activeWorker = worker;
+            activeTimeoutId = setTimeout(() => {
+                if (requestId !== activeRequestId) return;
+                stopActiveWorker();
+                renderError('正则执行超过 500 毫秒，已终止');
+            }, WORKER_TIMEOUT_MILLISECONDS);
+
+            worker.onmessage = event => {
+                const response = event.data || {};
+                if (requestId !== activeRequestId || response.requestId !== requestId) return;
+                stopActiveWorker();
+                if (!response.ok) {
+                    renderError('正则错误: ' + response.error);
+                    return;
+                }
+                renderMatches(textValue, response.matches, response.truncated === true);
+            };
+            worker.onerror = () => {
+                if (requestId !== activeRequestId) return;
+                fallbackOnly = true;
+                stopActiveWorker();
+                renderWorkerUnavailable();
+            };
+            worker.onmessageerror = worker.onerror;
+
+            try {
+                worker.postMessage({
+                    requestId,
+                    pattern: patternValue,
+                    flags: flagsValue,
+                    text: textValue
+                });
+            } catch (error) {
+                fallbackOnly = true;
+                stopActiveWorker();
+                renderWorkerUnavailable();
             }
         }
 
-        [pattern, text, flags].forEach(el => el.addEventListener('input', run));
+        [pattern, text, flags].forEach(element => element.addEventListener('input', () => run(false)));
+        btnRun.addEventListener('click', () => run(true));
         btnClear && btnClear.addEventListener('click', () => {
+            beginRequest();
             pattern.value = '';
             text.value = '';
             result.innerHTML = '';

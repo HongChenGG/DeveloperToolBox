@@ -7,19 +7,206 @@
 (function () {
     'use strict';
 
-    const LS_KEY = 'toolbox_reminders';
+    const REMINDERS_STORAGE_KEY = 'toolbox_reminders';
 
-    let items = load();
-    const snoozedThisSession = new Set();   // 本会话临时屏蔽
-
-    function load() {
-        try {
-            const raw = localStorage.getItem(LS_KEY);
-            return raw ? JSON.parse(raw) : [];
-        } catch { return []; }
+    // 提醒数据仅包含 JSON 值，克隆后修改可保持保存失败时的内存一致性。
+    function cloneReminderItems(value) {
+        return JSON.parse(JSON.stringify(value));
     }
-    function save() {
-        try { localStorage.setItem(LS_KEY, JSON.stringify(items)); } catch {}
+
+    // 解析存储内容；提醒字段逐项校验，未知结构只进入恢复流程。
+    function parseRemindersStorage(rawValue, timestamp = Date.now()) {
+        if (rawValue === null || rawValue === '') {
+            return { data: [], recovery: null, writeBlocked: false };
+        }
+
+        try {
+            const parsedItems = JSON.parse(rawValue);
+            if (!Array.isArray(parsedItems)) throw new Error('提醒数据格式错误');
+
+            parsedItems.forEach(reminder => {
+                if (!reminder || typeof reminder !== 'object' || Array.isArray(reminder)) {
+                    throw new Error('提醒条目格式错误');
+                }
+                if (typeof reminder.id !== 'string' && typeof reminder.id !== 'number') {
+                    throw new Error('提醒 ID 格式错误');
+                }
+                if (typeof reminder.at !== 'number' || !Number.isFinite(reminder.at)) {
+                    throw new Error('提醒时间格式错误');
+                }
+                if (typeof reminder.content !== 'string' || typeof reminder.confirmed !== 'boolean') {
+                    throw new Error('提醒字段格式错误');
+                }
+                if (typeof reminder.createdAt !== 'number' || !Number.isFinite(reminder.createdAt)) {
+                    throw new Error('提醒创建时间格式错误');
+                }
+            });
+
+            return {
+                data: cloneReminderItems(parsedItems),
+                recovery: null,
+                writeBlocked: false
+            };
+        } catch (error) {
+            return {
+                data: [],
+                recovery: {
+                    key: `${REMINDERS_STORAGE_KEY}_recovery_${timestamp}`,
+                    rawValue
+                },
+                writeBlocked: true
+            };
+        }
+    }
+
+    // 保存 next state，并以 boolean 明确返回持久化结果。
+    function trySaveReminders(storage, nextItems, writeBlocked = false) {
+        if (writeBlocked) return false;
+
+        try {
+            storage.setItem(REMINDERS_STORAGE_KEY, JSON.stringify(nextItems));
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // 将扫描到的新到期提醒追加到现有队列，保留原顺序并消除重复项。
+    function mergeReminderQueue(currentQueue, reminderItems, now, snoozedIds, currentId = null) {
+        const snoozedSet = snoozedIds instanceof Set ? snoozedIds : new Set(snoozedIds || []);
+        const eligibleIds = new Set(
+            reminderItems
+                .filter(reminder => (
+                    !reminder.confirmed
+                    && reminder.at <= now
+                    && !snoozedSet.has(reminder.id)
+                    && reminder.id !== currentId
+                ))
+                .map(reminder => reminder.id)
+        );
+        const nextQueue = [];
+        const queuedIds = new Set();
+
+        currentQueue.forEach(reminderId => {
+            if (!eligibleIds.has(reminderId) || queuedIds.has(reminderId)) return;
+            queuedIds.add(reminderId);
+            nextQueue.push(reminderId);
+        });
+        reminderItems.forEach(reminder => {
+            if (!eligibleIds.has(reminder.id) || queuedIds.has(reminder.id)) return;
+            queuedIds.add(reminder.id);
+            nextQueue.push(reminder.id);
+        });
+
+        return nextQueue;
+    }
+
+    // 出队前重新读取当前状态，跳过已确认、已稍后处理和重复项。
+    function takeNextReminder(currentQueue, reminderItems, now, snoozedIds) {
+        const snoozedSet = snoozedIds instanceof Set ? snoozedIds : new Set(snoozedIds || []);
+        const remainingQueue = [...currentQueue];
+        const checkedIds = new Set();
+
+        while (remainingQueue.length > 0) {
+            const reminderId = remainingQueue.shift();
+            if (checkedIds.has(reminderId)) continue;
+            checkedIds.add(reminderId);
+
+            const reminder = reminderItems.find(candidate => candidate.id === reminderId);
+            const canShow = reminder
+                && !reminder.confirmed
+                && reminder.at <= now
+                && !snoozedSet.has(reminderId);
+            if (!canShow) continue;
+
+            return {
+                reminder,
+                queue: remainingQueue.filter(queuedId => queuedId !== reminderId)
+            };
+        }
+
+        return { reminder: null, queue: [] };
+    }
+
+    // CommonJS 仅导出无 DOM 依赖的核心逻辑，浏览器路径继续执行界面初始化。
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = {
+            REMINDERS_STORAGE_KEY,
+            cloneReminderItems,
+            mergeReminderQueue,
+            parseRemindersStorage,
+            takeNextReminder,
+            trySaveReminders
+        };
+        return;
+    }
+
+    let items = [];
+    let storageRecovery = null;
+    let storageWriteBlocked = false;
+    const snoozedThisSession = new Set();
+
+    // 从 localStorage 加载提醒，并尽力另存损坏原文。
+    function loadRemindersFromStorage() {
+        try {
+            const result = parseRemindersStorage(
+                localStorage.getItem(REMINDERS_STORAGE_KEY),
+                Date.now()
+            );
+            items = result.data;
+            storageRecovery = result.recovery;
+            storageWriteBlocked = result.writeBlocked;
+
+            if (storageRecovery) {
+                try {
+                    localStorage.setItem(storageRecovery.key, storageRecovery.rawValue);
+                } catch (error) {
+                    console.error('保存提醒恢复副本失败:', error);
+                }
+            }
+        } catch (error) {
+            items = [];
+            storageWriteBlocked = true;
+            console.error('读取提醒数据失败:', error);
+        }
+    }
+
+    // 保存 next state，失败时不替换当前内存状态。
+    function save(nextItems) {
+        const saved = trySaveReminders(localStorage, nextItems, storageWriteBlocked);
+        if (!saved) {
+            const message = storageRecovery
+                ? '检测到损坏的提醒数据，已禁止覆盖原存储，请先下载恢复文件'
+                : '保存失败，可能是存储空间不足或本地存储已禁用';
+            console.error('保存提醒数据失败');
+            if (typeof showToast === 'function') showToast(message, 'error');
+        }
+        return saved;
+    }
+
+    // 在现有工具栏中动态提供损坏数据下载入口。
+    function createStorageRecoveryButton() {
+        if (!storageRecovery || document.getElementById('reminder-storage-recovery-download')) return;
+
+        const clearButton = document.getElementById('rem-clear-done');
+        if (!clearButton) return;
+
+        const recoveryButton = document.createElement('button');
+        recoveryButton.type = 'button';
+        recoveryButton.id = 'reminder-storage-recovery-download';
+        recoveryButton.className = 'btn btn-warning';
+        recoveryButton.textContent = '下载损坏数据';
+        recoveryButton.addEventListener('click', () => {
+            if (typeof downloadFile !== 'function') {
+                if (typeof showToast === 'function') showToast('恢复文件下载功能不可用', 'error');
+                return;
+            }
+            downloadFile(storageRecovery.rawValue, `${storageRecovery.key}.txt`);
+        });
+        clearButton.insertAdjacentElement('afterend', recoveryButton);
+        if (typeof showToast === 'function') {
+            showToast('提醒数据损坏，已保留原始数据并阻止覆盖', 'warning');
+        }
     }
 
     function genId() {
@@ -47,10 +234,101 @@
     }
 
     // ---------- 列表渲染 ----------
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, c => ({
-            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-        }[c]));
+    function createEmptyReminderState() {
+        const emptyState = document.createElement('div');
+        emptyState.style.margin = 'auto';
+        emptyState.style.textAlign = 'center';
+        emptyState.style.color = 'var(--text-secondary)';
+        emptyState.style.fontSize = '0.875rem';
+        emptyState.style.padding = '2.5rem 1.25rem';
+
+        const icon = document.createElement('div');
+        icon.style.fontSize = '3rem';
+        icon.style.marginBottom = '0.75rem';
+        icon.textContent = '📝';
+
+        const title = document.createElement('div');
+        title.style.fontSize = '1rem';
+        title.style.color = 'var(--text-primary)';
+        title.style.marginBottom = '0.375rem';
+        title.textContent = '还没有提醒';
+
+        const description = document.createElement('div');
+        description.style.fontSize = '0.75rem';
+        description.textContent = '在上方添加一条吧，到点会自动弹窗提醒';
+
+        emptyState.append(icon, title, description);
+        return emptyState;
+    }
+
+    function createReminderCard(reminder, now) {
+        const overdue = !reminder.confirmed && reminder.at <= now;
+        const stateClass = reminder.confirmed
+            ? 'rem-state-done'
+            : (overdue ? 'rem-state-overdue' : 'rem-state-pending');
+        const stateText = reminder.confirmed
+            ? '已确认'
+            : (overdue ? '已过期 · 待提醒' : '待提醒');
+
+        const card = document.createElement('div');
+        card.className = `rem-card ${stateClass}`;
+        card.__reminderReference = reminder;
+
+        const timeContainer = document.createElement('div');
+        timeContainer.className = 'rem-card-time';
+
+        const time = document.createElement('div');
+        time.className = 'rem-card-time-main';
+        time.textContent = fmtTime(reminder.at);
+
+        const relativeTime = document.createElement('div');
+        relativeTime.className = 'rem-card-time-rel';
+        relativeTime.textContent = fmtRelative(reminder.at);
+        timeContainer.append(time, relativeTime);
+
+        const body = document.createElement('div');
+        body.className = 'rem-card-body';
+
+        const content = document.createElement('div');
+        content.className = 'rem-card-content';
+        content.textContent = reminder.content;
+
+        const state = document.createElement('div');
+        state.className = 'rem-card-state';
+        state.textContent = stateText;
+        body.append(content, state);
+
+        const actions = document.createElement('div');
+        actions.className = 'rem-card-actions';
+
+        if (!reminder.confirmed) {
+            const acknowledgeButton = document.createElement('button');
+            acknowledgeButton.type = 'button';
+            acknowledgeButton.className = 'rem-act rem-act-ack';
+            acknowledgeButton.title = '标记为已确认（不再提醒）';
+            acknowledgeButton.textContent = '✓ 已知';
+            actions.appendChild(acknowledgeButton);
+        }
+
+        const deleteButton = document.createElement('button');
+        deleteButton.type = 'button';
+        deleteButton.className = 'rem-act rem-act-del';
+        deleteButton.title = '取消并删除此提醒';
+        deleteButton.textContent = '✕ 取消';
+        actions.appendChild(deleteButton);
+
+        card.append(timeContainer, body, actions);
+        return card;
+    }
+
+    function appendReminderGroup(list, titleText, reminderItems, now) {
+        if (reminderItems.length === 0) return;
+
+        const title = document.createElement('div');
+        title.className = 'rem-group-title';
+        title.textContent = `${titleText} (${reminderItems.length})`;
+        list.appendChild(title);
+        reminderItems.forEach(reminder => list.appendChild(createReminderCard(reminder, now)));
     }
 
     function render() {
@@ -60,76 +338,68 @@
         const $td    = document.getElementById('rem-stat-done');
         if (!$list) return;
 
-        items.sort((a, b) => a.at - b.at);
+        // 排序仅用于展示，避免渲染过程修改内存顺序。
+        const sortedItems = [...items].sort((firstItem, secondItem) => firstItem.at - secondItem.at);
         const now = Date.now();
-        const pending = items.filter(r => !r.confirmed && r.at <= now);
-        const future  = items.filter(r => r.at > now);
-        const done    = items.filter(r => r.confirmed);
+        const pending = sortedItems.filter(reminder => !reminder.confirmed && reminder.at <= now);
+        const future = sortedItems.filter(reminder => reminder.at > now);
+        const done = sortedItems.filter(reminder => reminder.confirmed);
 
         if ($tt) $tt.textContent = items.length;
         if ($tp) $tp.textContent = pending.length;
         if ($td) $td.textContent = done.length;
 
+        $list.replaceChildren();
         if (items.length === 0) {
-            $list.innerHTML = `<div style="margin:auto;text-align:center;color:var(--text-secondary);font-size:14px;padding:40px 20px">
-                <div style="font-size:48px;margin-bottom:12px">📝</div>
-                <div style="font-size:16px;color:var(--text-primary);margin-bottom:6px">还没有提醒</div>
-                <div style="font-size:12px">在上方添加一条吧，到点会自动弹窗提醒</div>
-            </div>`;
+            $list.appendChild(createEmptyReminderState());
             return;
         }
 
-        const renderOne = (r) => {
-            const overdue = !r.confirmed && r.at <= now;
-            const stateCls = r.confirmed ? 'rem-state-done' : (overdue ? 'rem-state-overdue' : 'rem-state-pending');
-            const stateTxt = r.confirmed ? '已确认' : (overdue ? '已过期 · 待提醒' : '待提醒');
-            return `<div class="rem-card ${stateCls}" data-id="${r.id}">
-                <div class="rem-card-time">
-                    <div class="rem-card-time-main">${fmtTime(r.at)}</div>
-                    <div class="rem-card-time-rel">${fmtRelative(r.at)}</div>
-                </div>
-                <div class="rem-card-body">
-                    <div class="rem-card-content">${escapeHtml(r.content)}</div>
-                    <div class="rem-card-state">${stateTxt}</div>
-                </div>
-                <div class="rem-card-actions">
-                    ${r.confirmed ? '' : '<button class="rem-act rem-act-ack" data-act="ack" title="标记为已确认（不再提醒）">✓ 已知</button>'}
-                    <button class="rem-act rem-act-del" data-act="del" title="取消并删除此提醒">✕ 取消</button>
-                </div>
-            </div>`;
-        };
-
-        const grouped = [];
-        if (pending.length) grouped.push(`<div class="rem-group-title">⏰ 已过期待确认 (${pending.length})</div>`, ...pending.map(renderOne));
-        if (future.length)  grouped.push(`<div class="rem-group-title">📅 未来提醒 (${future.length})</div>`,    ...future.map(renderOne));
-        if (done.length)    grouped.push(`<div class="rem-group-title">✓ 已确认 (${done.length})</div>`,         ...done.map(renderOne));
-        $list.innerHTML = grouped.join('');
+        appendReminderGroup($list, '⏰ 已过期待确认', pending, now);
+        appendReminderGroup($list, '📅 未来提醒', future, now);
+        appendReminderGroup($list, '✓ 已确认', done, now);
     }
 
     // ---------- 增删改 ----------
     function add(at, content) {
         if (!at || !content.trim()) return false;
-        items.push({
+
+        // 新增提醒先写入克隆，保存成功后再替换当前内存。
+        const nextItems = cloneReminderItems(items);
+        nextItems.push({
             id: genId(),
-            at: at,
+            at,
             content: content.trim(),
             confirmed: false,
             createdAt: Date.now()
         });
-        save();
+
+        if (!save(nextItems)) return false;
+        items = nextItems;
         render();
         return true;
     }
 
     function ack(id) {
-        const r = items.find(x => x.id === id);
-        if (r) { r.confirmed = true; save(); render(); }
+        // 确认操作失败时保留原状态和当前提醒弹窗。
+        const nextItems = cloneReminderItems(items);
+        const nextReminder = nextItems.find(reminder => reminder.id === id);
+        if (!nextReminder) return false;
+
+        nextReminder.confirmed = true;
+        if (!save(nextItems)) return false;
+        items = nextItems;
+        render();
+        return true;
     }
 
     function del(id) {
-        items = items.filter(x => x.id !== id);
-        save();
+        // 删除操作先持久化候选状态，失败时列表保持不变。
+        const nextItems = items.filter(reminder => reminder.id !== id);
+        if (!save(nextItems)) return false;
+        items = nextItems;
         render();
+        return true;
     }
 
     // ---------- 到期弹窗 ----------
@@ -138,23 +408,41 @@
 
     function scanAndPrompt() {
         const now = Date.now();
-        modalQueue = items.filter(r => !r.confirmed && r.at <= now && !snoozedThisSession.has(r.id));
+        const modal = document.getElementById('rem-modal');
+        const currentId = modalShowing ? modal?.dataset.currentId || null : null;
+        modalQueue = mergeReminderQueue(
+            modalQueue,
+            items,
+            now,
+            snoozedThisSession,
+            currentId
+        );
         showNext();
     }
 
     function showNext() {
         if (modalShowing) return;
-        const r = modalQueue.shift();
-        if (!r) return;
+
+        // 展示前复核当前内存，避免已确认或已稍后处理的提醒再次弹出。
+        const nextResult = takeNextReminder(
+            modalQueue,
+            items,
+            Date.now(),
+            snoozedThisSession
+        );
+        modalQueue = nextResult.queue;
+        const reminder = nextResult.reminder;
+        if (!reminder) return;
+
         const $modal = document.getElementById('rem-modal');
         const $time  = document.getElementById('rem-modal-time');
         const $body  = document.getElementById('rem-modal-content');
         if (!$modal) return;
         modalShowing = true;
-        $time.textContent = `预定时间：${fmtTime(r.at)} · ${fmtRelative(r.at)}`;
-        $body.textContent = r.content;
+        $time.textContent = `预定时间：${fmtTime(reminder.at)} · ${fmtRelative(reminder.at)}`;
+        $body.textContent = reminder.content;
         $modal.style.display = 'flex';
-        $modal.dataset.currentId = r.id;
+        $modal.dataset.currentId = reminder.id;
     }
 
     function closeModal() {
@@ -171,6 +459,9 @@
         const $list  = document.getElementById('rem-list');
         if (!$list) return; // 页面尚未挂载
 
+        loadRemindersFromStorage();
+        createStorageRecoveryButton();
+
         // 默认时间设为当前 +5min（更友好）
         const $at = document.getElementById('rem-at');
         if ($at && !$at.value) {
@@ -186,7 +477,7 @@
             if (!$c.value.trim()) { if (typeof showToast === 'function') showToast('请填写提醒内容', 'warning'); $c.focus(); return; }
             const at = new Date(v).getTime();
             if (isNaN(at)) { if (typeof showToast === 'function') showToast('时间格式不正确', 'error'); return; }
-            add(at, $c.value);
+            if (!add(at, $c.value)) return;
             $c.value = '';
             if (typeof showToast === 'function') showToast('已添加提醒：' + fmtTime(at), 'success');
         });
@@ -195,23 +486,26 @@
             const cnt = items.filter(r => r.confirmed).length;
             if (cnt === 0) { if (typeof showToast === 'function') showToast('没有已确认的提醒', 'info'); return; }
             if (!confirm(`确定清掉 ${cnt} 条已确认的提醒？`)) return;
-            items = items.filter(r => !r.confirmed);
-            save();
+
+            // 清理已完成提醒也遵循先保存再替换内存的顺序。
+            const nextItems = items.filter(reminder => !reminder.confirmed);
+            if (!save(nextItems)) return;
+            items = nextItems;
             render();
         });
 
-        // 列表事件委托：知道了 / 取消
-        $list.addEventListener('click', (e) => {
-            const btn = e.target.closest('.rem-act');
-            if (!btn) return;
-            const card = btn.closest('.rem-card');
-            const id = card?.getAttribute('data-id');
-            if (!id) return;
-            const act = btn.getAttribute('data-act');
-            if (act === 'ack') ack(id);
-            else if (act === 'del') {
+        // 列表事件委托：提醒 ID 仅从 DOM 对象引用读取，不进入属性字符串。
+        $list.addEventListener('click', (event) => {
+            const button = event.target.closest('.rem-act');
+            const card = button?.closest('.rem-card');
+            const reminder = card?.__reminderReference;
+            if (!button || !reminder) return;
+
+            if (button.classList.contains('rem-act-ack')) {
+                ack(reminder.id);
+            } else if (button.classList.contains('rem-act-del')) {
                 if (!confirm('确定取消并删除此提醒？')) return;
-                del(id);
+                del(reminder.id);
             }
         });
 
@@ -219,7 +513,7 @@
         const $modal = document.getElementById('rem-modal');
         document.getElementById('rem-modal-ack').addEventListener('click', () => {
             const id = $modal.dataset.currentId;
-            if (id) ack(id);
+            if (id && !ack(id)) return;
             closeModal();
         });
         document.getElementById('rem-modal-later').addEventListener('click', () => {

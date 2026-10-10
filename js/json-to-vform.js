@@ -124,8 +124,7 @@
 
         btnCopy.addEventListener('click', () => {
             if (!out.value) return;
-            navigator.clipboard.writeText(out.value);
-            if (typeof showToast === 'function') showToast('已复制', 'success');
+            copyToClipboard(out.value);
         });
     }
 

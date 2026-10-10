@@ -38,7 +38,10 @@
 
         function render() {
             const s = input.value.trim();
-            if (!s) { grid.innerHTML = ''; return; }
+            if (!s) {
+                grid.replaceChildren();
+                return;
+            }
             const list = [
                 ['camelCase（小驼峰）', camelCase(s)],
                 ['PascalCase（大驼峰）', pascalCase(s)],
@@ -54,18 +57,50 @@
                 ['rEvErSe CaSe', [...s].map((c, i) => i % 2 ? c.toUpperCase() : c.toLowerCase()).join('')],
                 ['反转字符串', [...s].reverse().join('')]
             ];
-            grid.innerHTML = list.map(([k, v]) => `
-                <div style="padding:10px;background:var(--bg-darker);border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-                    <div style="flex:1;min-width:0">
-                        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${k}</div>
-                        <div style="font-family:monospace;color:var(--text-primary);word-break:break-all">${v}</div>
-                    </div>
-                    <button class="btn btn-success" style="padding:4px 12px;font-size:12px;flex:none" data-c="${v.replace(/"/g, '&quot;')}">复制</button>
-                </div>
-            `).join('');
-            grid.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
-                navigator.clipboard.writeText(b.getAttribute('data-c')).then(() => showToast && showToast('已复制', 'success'));
-            }));
+            const fragment = document.createDocumentFragment();
+
+            list.forEach(([label, value]) => {
+                const item = document.createElement('div');
+                item.style.padding = '0.625rem';
+                item.style.background = 'var(--bg-darker)';
+                item.style.borderRadius = '0.375rem';
+                item.style.marginBottom = '0.5rem';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                item.style.gap = '0.625rem';
+
+                const contentBox = document.createElement('div');
+                contentBox.style.flex = '1';
+                contentBox.style.minWidth = '0';
+
+                const labelElement = document.createElement('div');
+                labelElement.style.fontSize = '0.75rem';
+                labelElement.style.color = 'var(--text-secondary)';
+                labelElement.style.marginBottom = '0.25rem';
+                labelElement.textContent = label;
+
+                const valueElement = document.createElement('div');
+                valueElement.style.fontFamily = 'monospace';
+                valueElement.style.color = 'var(--text-primary)';
+                valueElement.style.wordBreak = 'break-all';
+                valueElement.textContent = value;
+
+                const copyButton = document.createElement('button');
+                copyButton.className = 'btn btn-success';
+                copyButton.style.padding = '0.25rem 0.75rem';
+                copyButton.style.fontSize = '0.75rem';
+                copyButton.style.flex = 'none';
+                copyButton.type = 'button';
+                copyButton.textContent = '复制';
+                copyButton.addEventListener('click', () => copyToClipboard(value));
+
+                contentBox.append(labelElement, valueElement);
+                item.append(contentBox, copyButton);
+                fragment.appendChild(item);
+            });
+
+            grid.replaceChildren(fragment);
         }
         input.addEventListener('input', render);
 
@@ -83,7 +118,7 @@
             const en = (t.match(/[a-zA-Z]/g) || []).length;
             const num = (t.match(/\d/g) || []).length;
             const words = t.split(/\s+/).filter(Boolean).length;
-            stat.innerHTML = `字符 ${t.length} · 字节 ${new Blob([t]).size} · 行数 ${ls.length} · 单词 ${words} · 中文 ${cn} · 英文 ${en} · 数字 ${num}`;
+            stat.textContent = `字符 ${t.length} · 字节 ${new Blob([t]).size} · 行数 ${ls.length} · 单词 ${words} · 中文 ${cn} · 英文 ${en} · 数字 ${num}`;
         });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -1,3 +1,773 @@
+const QR_MAX_INPUT_BYTES = 48000;
+const QR_MAX_CHUNKS = 40;
+const QR_DEFAULT_SIZE = 200;
+const QR_MAX_SIZE = 1024;
+const QR_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const QR_MAX_SOURCE_PIXELS = 64 * 1024 * 1024;
+const QR_MAX_DECODE_PIXELS = 4 * 1024 * 1024;
+const QR_MAX_DECODE_SIDE = 4096;
+const qrTextEncoder = new TextEncoder();
+
+function parseQrSize(value) {
+    const normalizedValue = String(value ?? '').trim();
+    if (!/^\d+$/.test(normalizedValue)) {
+        throw new Error(`二维码尺寸必须是 1-${QR_MAX_SIZE} 的正整数`);
+    }
+
+    const size = Number(normalizedValue);
+    if (!Number.isSafeInteger(size) || size < 1 || size > QR_MAX_SIZE) {
+        throw new Error(`二维码尺寸必须是 1-${QR_MAX_SIZE} 的正整数`);
+    }
+    return size;
+}
+
+function validateQrUploadSize(fileSize) {
+    const normalizedSize = Number(fileSize);
+    if (!Number.isSafeInteger(normalizedSize) || normalizedSize < 0 || normalizedSize > QR_MAX_UPLOAD_BYTES) {
+        throw new Error(`二维码图片文件大小超过上限 ${QR_MAX_UPLOAD_BYTES} 字节`);
+    }
+    return normalizedSize;
+}
+
+function getQrDecodeDimensions(sourceWidth, sourceHeight) {
+    const width = Number(sourceWidth);
+    const height = Number(sourceHeight);
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0) {
+        throw new Error('二维码图片尺寸无效');
+    }
+
+    const sourcePixels = width * height;
+    if (!Number.isSafeInteger(sourcePixels) || sourcePixels > QR_MAX_SOURCE_PIXELS) {
+        throw new Error(`二维码图片像素超过上限 ${QR_MAX_SOURCE_PIXELS}`);
+    }
+
+    const scale = Math.min(
+        1,
+        QR_MAX_DECODE_SIDE / width,
+        QR_MAX_DECODE_SIDE / height,
+        Math.sqrt(QR_MAX_DECODE_PIXELS / sourcePixels)
+    );
+    let decodeWidth = Math.max(1, Math.floor(width * scale));
+    let decodeHeight = Math.max(1, Math.floor(height * scale));
+
+    // 浮点取整后再次收紧，确保解码 Canvas 永远不越过像素上限。
+    while (decodeWidth * decodeHeight > QR_MAX_DECODE_PIXELS) {
+        if (decodeWidth >= decodeHeight) decodeWidth--;
+        else decodeHeight--;
+    }
+
+    return {
+        height: decodeHeight,
+        scale,
+        wasScaled: scale < 1,
+        width: decodeWidth
+    };
+}
+
+function getQrByteLength(text) {
+    return qrTextEncoder.encode(String(text ?? '')).length;
+}
+
+function splitTextByByteLength(text, maxByteLength) {
+    if (!Number.isInteger(maxByteLength) || maxByteLength <= 0) {
+        throw new Error('二维码分片字节数必须是正整数');
+    }
+
+    const chunks = [];
+    let currentChunk = '';
+    let currentByteLength = 0;
+
+    for (const character of String(text ?? '')) {
+        const characterByteLength = getQrByteLength(character);
+        if (characterByteLength > maxByteLength) {
+            throw new Error('单个字符超过二维码分片上限');
+        }
+        if (currentChunk && currentByteLength + characterByteLength > maxByteLength) {
+            chunks.push(currentChunk);
+            currentChunk = '';
+            currentByteLength = 0;
+        }
+        currentChunk += character;
+        currentByteLength += characterByteLength;
+    }
+
+    if (currentChunk) chunks.push(currentChunk);
+    return chunks;
+}
+
+function createQrGroupId() {
+    const randomBytes = new Uint8Array(6);
+    crypto.getRandomValues(randomBytes);
+    return Array.from(randomBytes, byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+function prepareQrPayloads(content, chunkByteLength, groupId = createQrGroupId()) {
+    const normalizedContent = String(content ?? '');
+    const totalBytes = getQrByteLength(normalizedContent);
+    if (totalBytes > QR_MAX_INPUT_BYTES) {
+        throw new Error(`输入 ${totalBytes} 字节，超过上限 ${QR_MAX_INPUT_BYTES} 字节`);
+    }
+
+    const chunks = splitTextByByteLength(normalizedContent, chunkByteLength);
+    if (chunks.length > QR_MAX_CHUNKS) {
+        throw new Error(`分片数量 ${chunks.length}，超过上限 ${QR_MAX_CHUNKS}`);
+    }
+
+    return {
+        chunks,
+        groupId,
+        payloads: chunks.map((chunk, index) => `[TBXQR:${groupId}:${index + 1}/${chunks.length}]\n${chunk}`)
+    };
+}
+
+function selectQrOutputNode(container) {
+    return container?.querySelector('canvas:not([hidden])')
+        || container?.querySelector('img:not([hidden])')
+        || null;
+}
+
+function formatShanghaiDateTime(dateValue) {
+    const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    if (Number.isNaN(date.getTime())) throw new Error('无效日期');
+
+    const formatter = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        weekday: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+    });
+    const parts = Object.fromEntries(
+        formatter.formatToParts(date)
+            .filter(part => part.type !== 'literal')
+            .map(part => [part.type, part.value])
+    );
+
+    return {
+        ...parts,
+        formatted: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
+    };
+}
+
+function parseShanghaiDateTimeLocal(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) throw new Error('时间格式无效');
+
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    const timestamp = Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour) - 8,
+        Number(minute),
+        Number(second)
+    );
+    const date = new Date(timestamp);
+    const formatted = formatShanghaiDateTime(date);
+    if (formatted.year !== year || formatted.month !== month || formatted.day !== day
+        || formatted.hour !== hour || formatted.minute !== minute || formatted.second !== second) {
+        throw new Error('时间值无效');
+    }
+    return date;
+}
+
+async function fetchJsonWithTimeout(url, {
+    timeoutMs = 15000,
+    signal,
+    fetchImpl = fetch,
+    headers
+} = {}) {
+    const controller = new AbortController();
+    const abortFromParent = () => controller.abort();
+    signal?.addEventListener('abort', abortFromParent, { once: true });
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        let response;
+        try {
+            response = await fetchImpl(url, { signal: controller.signal, headers });
+        } catch (error) {
+            const requestError = new Error(error.message || '网络请求失败');
+            requestError.code = controller.signal.aborted
+                ? (signal?.aborted ? 'ABORTED' : 'TIMEOUT')
+                : 'NETWORK_ERROR';
+            throw requestError;
+        }
+
+        if (!response.ok) {
+            const httpError = new Error(`HTTP ${response.status}`);
+            httpError.code = 'HTTP_ERROR';
+            httpError.status = response.status;
+            throw httpError;
+        }
+
+        try {
+            return await response.json();
+        } catch (error) {
+            const jsonError = new Error('响应不是有效 JSON');
+            jsonError.code = 'INVALID_JSON';
+            throw jsonError;
+        }
+    } finally {
+        clearTimeout(timeoutId);
+        signal?.removeEventListener('abort', abortFromParent);
+    }
+}
+
+// 区分 JSON 字段的真实类型，避免把 null 和数组误判为普通对象。
+function getJsonFieldKind(value) {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return 'array';
+    return typeof value;
+}
+
+// 对对象和数组使用可编辑的格式化 JSON，其他类型保持直观文本。
+function formatJsonFieldValue(value) {
+    const fieldKind = getJsonFieldKind(value);
+    if (fieldKind === 'object' || fieldKind === 'array') {
+        return JSON.stringify(value, null, 2);
+    }
+    if (fieldKind === 'null') return '';
+    return String(value);
+}
+
+// 按模板字段类型恢复表单值，任何失败都在修改结果数组之前抛出。
+function parseJsonFieldValue(rawValue, fieldKind, fieldName = '字段') {
+    const textValue = String(rawValue ?? '');
+
+    if (fieldKind === 'object' || fieldKind === 'array') {
+        let parsedValue;
+        try {
+            parsedValue = JSON.parse(textValue);
+        } catch (error) {
+            throw new Error(`${fieldName} 的 JSON 格式错误：${error.message}`);
+        }
+
+        const parsedKind = getJsonFieldKind(parsedValue);
+        if (parsedKind !== fieldKind) {
+            const expectedKind = fieldKind === 'array' ? '数组' : '对象';
+            throw new Error(`${fieldName} 必须是 JSON ${expectedKind}`);
+        }
+        return parsedValue;
+    }
+
+    if (fieldKind === 'number') {
+        if (textValue.trim() === '') return 0;
+        const numericValue = Number(textValue);
+        if (!Number.isFinite(numericValue)) {
+            throw new Error(`${fieldName} 必须是有效数字`);
+        }
+        return numericValue;
+    }
+
+    if (fieldKind === 'boolean') return textValue === 'true';
+    if (fieldKind === 'null') {
+        return textValue.trim() === '' || textValue.trim() === 'null' ? null : textValue;
+    }
+    return textValue;
+}
+
+// 返回当前位置受 SQL 引号或注释保护的结束位置；未受保护时返回原位置。
+function getSqlProtectedSegmentEnd(sql, startIndex) {
+    const currentCharacter = sql[startIndex];
+    const nextCharacter = sql[startIndex + 1];
+    const sqlLength = sql.length;
+
+    if (currentCharacter === "'" || currentCharacter === '"' || currentCharacter === '`') {
+        let index = startIndex + 1;
+        while (index < sqlLength) {
+            if (sql[index] === '\\' && index + 1 < sqlLength) {
+                index += 2;
+                continue;
+            }
+            if (sql[index] === currentCharacter) {
+                if (sql[index + 1] === currentCharacter) {
+                    index += 2;
+                    continue;
+                }
+                return index + 1;
+            }
+            index++;
+        }
+        return sqlLength;
+    }
+
+    if (currentCharacter === '[') {
+        let index = startIndex + 1;
+        while (index < sqlLength) {
+            if (sql[index] === ']') {
+                if (sql[index + 1] === ']') {
+                    index += 2;
+                    continue;
+                }
+                return index + 1;
+            }
+            index++;
+        }
+        return sqlLength;
+    }
+
+    if ((currentCharacter === '-' && nextCharacter === '-') || currentCharacter === '#') {
+        const lineEndIndex = sql.indexOf('\n', startIndex + 1);
+        return lineEndIndex === -1 ? sqlLength : lineEndIndex + 1;
+    }
+
+    if (currentCharacter === '/' && nextCharacter === '*') {
+        const commentEndIndex = sql.indexOf('*/', startIndex + 2);
+        return commentEndIndex === -1 ? sqlLength : commentEndIndex + 2;
+    }
+
+    return startIndex;
+}
+
+// 跳过空白与注释，供 SQL 结构解析定位下一个有效字符。
+function skipSqlWhitespaceAndComments(sql, startIndex) {
+    let index = startIndex;
+    while (index < sql.length) {
+        if (/\s/.test(sql[index])) {
+            index++;
+            continue;
+        }
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sql, index);
+        const startsComment = (sql[index] === '-' && sql[index + 1] === '-')
+            || sql[index] === '#'
+            || (sql[index] === '/' && sql[index + 1] === '*');
+        if (startsComment && protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        break;
+    }
+    return index;
+}
+
+function matchesSqlKeyword(sql, startIndex, keyword) {
+    if (sql.slice(startIndex, startIndex + keyword.length).toUpperCase() !== keyword.toUpperCase()) {
+        return false;
+    }
+    const beforeCharacter = startIndex === 0 ? '' : sql[startIndex - 1];
+    const afterCharacter = sql[startIndex + keyword.length] || '';
+    return !/[A-Za-z0-9_$]/.test(beforeCharacter) && !/[A-Za-z0-9_$]/.test(afterCharacter);
+}
+
+// 在 SQL 语法区域查找关键字，忽略字面量、标识符和注释中的同名文本。
+function findSqlKeyword(sql, keyword, startIndex = 0) {
+    let index = startIndex;
+    while (index < sql.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sql, index);
+        if (protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        if (matchesSqlKeyword(sql, index, keyword)) return index;
+        index++;
+    }
+    return -1;
+}
+
+// 查找与指定左括号匹配的右括号，忽略受保护片段内的括号。
+function findMatchingSqlParenthesis(sql, openIndex) {
+    let depth = 0;
+    let index = openIndex;
+    while (index < sql.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sql, index);
+        if (protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        if (sql[index] === '(') depth++;
+        if (sql[index] === ')') {
+            depth--;
+            if (depth === 0) return index;
+        }
+        index++;
+    }
+    throw new Error('SQL 括号未闭合');
+}
+
+// 按顶层逗号拆分列或值，保留字符串和函数参数内的逗号。
+function splitSqlList(sqlFragment) {
+    const items = [];
+    let itemStartIndex = 0;
+    let depth = 0;
+    let index = 0;
+
+    while (index < sqlFragment.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sqlFragment, index);
+        if (protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        if (sqlFragment[index] === '(') depth++;
+        if (sqlFragment[index] === ')') depth--;
+        if (sqlFragment[index] === ',' && depth === 0) {
+            items.push(sqlFragment.slice(itemStartIndex, index).trim());
+            itemStartIndex = index + 1;
+        }
+        index++;
+    }
+
+    const finalItem = sqlFragment.slice(itemStartIndex).trim();
+    if (finalItem || items.length > 0) items.push(finalItem);
+    return items;
+}
+
+function normalizeSqlIdentifier(identifier) {
+    const identifierPart = String(identifier).trim().split('.').pop().trim();
+    if ((identifierPart.startsWith('`') && identifierPart.endsWith('`'))
+        || (identifierPart.startsWith('"') && identifierPart.endsWith('"'))
+        || (identifierPart.startsWith('[') && identifierPart.endsWith(']'))) {
+        return identifierPart.slice(1, -1);
+    }
+    return identifierPart;
+}
+
+function isInsertSqlStatement(statement) {
+    const statementStartIndex = skipSqlWhitespaceAndComments(statement, 0);
+    return matchesSqlKeyword(statement, statementStartIndex, 'INSERT');
+}
+
+// 完整扫描 SQL 文本，只在非保护区域的分号处切分语句。
+function splitSqlStatements(sqlText) {
+    const statements = [];
+    let statementStartIndex = 0;
+    let index = 0;
+
+    while (index < sqlText.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sqlText, index);
+        if (protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        if (sqlText[index] === ';') {
+            const statement = sqlText.slice(statementStartIndex, index + 1).trim();
+            if (statement) statements.push(statement);
+            statementStartIndex = index + 1;
+        }
+        index++;
+    }
+
+    const trailingStatement = sqlText.slice(statementStartIndex).trim();
+    if (trailingStatement) statements.push(trailingStatement);
+    return statements;
+}
+
+// 独立解析一条 INSERT，返回表、列、每组 VALUES 与尾部子句。
+function parseInsertStatement(statement) {
+    const sourceSql = String(statement);
+    const insertStartIndex = skipSqlWhitespaceAndComments(sourceSql, 0);
+    if (!matchesSqlKeyword(sourceSql, insertStartIndex, 'INSERT')) {
+        throw new Error('不是 INSERT 语句');
+    }
+
+    let cursorIndex = skipSqlWhitespaceAndComments(sourceSql, insertStartIndex + 'INSERT'.length);
+    if (!matchesSqlKeyword(sourceSql, cursorIndex, 'INTO')) {
+        throw new Error('INSERT 缺少 INTO');
+    }
+    cursorIndex = skipSqlWhitespaceAndComments(sourceSql, cursorIndex + 'INTO'.length);
+
+    const tableStartIndex = cursorIndex;
+    while (cursorIndex < sourceSql.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sourceSql, cursorIndex);
+        if (protectedEndIndex > cursorIndex) {
+            cursorIndex = protectedEndIndex;
+            continue;
+        }
+        if (/\s/.test(sourceSql[cursorIndex]) || sourceSql[cursorIndex] === '(') break;
+        cursorIndex++;
+    }
+    const tableToken = sourceSql.slice(tableStartIndex, cursorIndex).trim();
+    if (!tableToken) throw new Error('INSERT 缺少表名');
+
+    cursorIndex = skipSqlWhitespaceAndComments(sourceSql, cursorIndex);
+    if (sourceSql[cursorIndex] !== '(') throw new Error('INSERT 缺少字段列表');
+    const columnsEndIndex = findMatchingSqlParenthesis(sourceSql, cursorIndex);
+    const columns = splitSqlList(sourceSql.slice(cursorIndex + 1, columnsEndIndex)).map(rawColumn => ({
+        name: normalizeSqlIdentifier(rawColumn),
+        raw: rawColumn
+    }));
+    if (columns.length === 0 || columns.some(column => !column.name)) {
+        throw new Error('INSERT 字段列表为空');
+    }
+
+    const valuesKeywordIndex = findSqlKeyword(sourceSql, 'VALUES', columnsEndIndex + 1);
+    if (valuesKeywordIndex === -1) throw new Error('INSERT 缺少 VALUES');
+
+    const valueGroups = [];
+    let groupStartIndex = skipSqlWhitespaceAndComments(sourceSql, valuesKeywordIndex + 'VALUES'.length);
+    let tailStartIndex = groupStartIndex;
+
+    while (sourceSql[groupStartIndex] === '(') {
+        const groupEndIndex = findMatchingSqlParenthesis(sourceSql, groupStartIndex);
+        valueGroups.push(splitSqlList(sourceSql.slice(groupStartIndex + 1, groupEndIndex)));
+        tailStartIndex = groupEndIndex + 1;
+
+        const separatorIndex = skipSqlWhitespaceAndComments(sourceSql, groupEndIndex + 1);
+        if (sourceSql[separatorIndex] !== ',') break;
+        const nextGroupIndex = skipSqlWhitespaceAndComments(sourceSql, separatorIndex + 1);
+        if (sourceSql[nextGroupIndex] !== '(') {
+            throw new Error('VALUES 组分隔符后缺少括号');
+        }
+        groupStartIndex = nextGroupIndex;
+    }
+
+    if (valueGroups.length === 0) throw new Error('VALUES 后缺少值组');
+
+    return {
+        table: normalizeSqlIdentifier(tableToken),
+        tableToken,
+        columns,
+        valueGroups,
+        tail: sourceSql.slice(tailStartIndex).trimStart(),
+        leadingText: sourceSql.slice(0, insertStartIndex)
+    };
+}
+
+// 根据列名而非首条语句中的索引重写单条 INSERT。
+function rewriteInsertStatement(statement, columnNamesToRemove = [], targetTableName = '') {
+    const parsedStatement = parseInsertStatement(statement);
+    const removedColumnNames = new Set(
+        Array.from(columnNamesToRemove, columnName => normalizeSqlIdentifier(columnName).toLowerCase())
+    );
+    const keptColumnIndexes = parsedStatement.columns
+        .map((column, columnIndex) => ({ column, columnIndex }))
+        .filter(({ column }) => !removedColumnNames.has(column.name.toLowerCase()))
+        .map(({ columnIndex }) => columnIndex);
+
+    if (keptColumnIndexes.length === 0) throw new Error('不能删除全部字段');
+
+    const rewrittenGroups = parsedStatement.valueGroups.map(values => {
+        if (values.length !== parsedStatement.columns.length) {
+            throw new Error(`字段数 ${parsedStatement.columns.length} 与值数 ${values.length} 不一致`);
+        }
+        return `(${keptColumnIndexes.map(columnIndex => values[columnIndex]).join(', ')})`;
+    });
+    const rewrittenColumns = keptColumnIndexes.map(columnIndex => parsedStatement.columns[columnIndex].raw);
+    const rewrittenTable = String(targetTableName).trim() || parsedStatement.tableToken;
+    const tailSeparator = parsedStatement.tail && !parsedStatement.tail.startsWith(';') ? ' ' : '';
+
+    return `${parsedStatement.leadingText}INSERT INTO ${rewrittenTable} (${rewrittenColumns.join(', ')}) VALUES ${rewrittenGroups.join(', ')}${tailSeparator}${parsedStatement.tail}`;
+}
+
+// 批量处理时固定标注无法解析的 INSERT，并返回真实成功、失败数量。
+function rewriteInsertStatements(sqlText, columnNamesToRemove = [], targetTableName = '') {
+    const statements = splitSqlStatements(String(sqlText));
+    const outputStatements = [];
+    let successCount = 0;
+    let failureCount = 0;
+
+    statements.forEach(statement => {
+        if (!isInsertSqlStatement(statement)) {
+            outputStatements.push(statement);
+            return;
+        }
+
+        try {
+            outputStatements.push(rewriteInsertStatement(statement, columnNamesToRemove, targetTableName));
+            successCount++;
+        } catch (error) {
+            outputStatements.push(`${statement}\n/* toolbox: 未处理 - 无法解析 INSERT 结构 */`);
+            failureCount++;
+        }
+    });
+
+    return {
+        sql: outputStatements.join('\n'),
+        successCount,
+        failureCount
+    };
+}
+
+// 统计真正的 JDBC 占位符，忽略字面量、标识符和注释中的问号。
+function countSqlPlaceholders(sql) {
+    let placeholderCount = 0;
+    let index = 0;
+    while (index < sql.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sql, index);
+        if (protectedEndIndex > index) {
+            index = protectedEndIndex;
+            continue;
+        }
+        if (sql[index] === '?') placeholderCount++;
+        index++;
+    }
+    return placeholderCount;
+}
+
+function isCompleteMyBatisParameter(parameterText) {
+    if (parameterText === 'null') return true;
+    return /^[\s\S]*\([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\[\])*\)$/.test(parameterText);
+}
+
+// 按 MyBatis 类型格式化 SQL 字面量，包限定名只取末级类型判断。
+function formatMyBatisParameter(parameterText) {
+    if (parameterText === 'null') return 'null';
+
+    const parameterMatch = parameterText.match(/^([\s\S]*)\(([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*(?:\[\])*)\)$/);
+    if (!parameterMatch) throw new Error(`无法解析参数：${parameterText}`);
+
+    const parameterValue = parameterMatch[1];
+    const parameterType = parameterMatch[2];
+    if (parameterValue === 'null') return 'null';
+
+    const simpleType = parameterType.split('.').pop().replace(/\[\]$/, '');
+    const integerTypes = new Set(['Integer', 'Long', 'Short', 'Byte', 'BigInteger']);
+    const decimalTypes = new Set(['Double', 'Float', 'BigDecimal', 'Number']);
+    if (integerTypes.has(simpleType)) {
+        if (!/^[+-]?(?:0|[1-9]\d*)$/.test(parameterValue)) {
+            throw new Error(`${simpleType} 参数不是有效十进制整数：${parameterValue}`);
+        }
+        return parameterValue;
+    }
+    if (decimalTypes.has(simpleType)) {
+        if (!/^[+-]?(?:(?:0|[1-9]\d*)(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(parameterValue)) {
+            throw new Error(`${simpleType} 参数不是有效有限数值：${parameterValue}`);
+        }
+        const numericValue = Number(parameterValue);
+        if (!Number.isFinite(numericValue)) {
+            throw new Error(`${simpleType} 参数超出有限数值范围：${parameterValue}`);
+        }
+        return parameterValue;
+    }
+    if (simpleType === 'Boolean' && /^(?:true|false)$/i.test(parameterValue)) {
+        return parameterValue.toLowerCase();
+    }
+
+    return `'${parameterValue.replace(/'/g, "''")}'`;
+}
+
+// 仅在逗号前已形成完整“值(类型)”时切分，允许值本身含逗号和括号。
+function parseMyBatisParameters(parametersText) {
+    const normalizedText = String(parametersText).trim();
+    if (!normalizedText) return [];
+
+    const parameters = [];
+    let parameterStartIndex = 0;
+    for (let index = 0; index <= normalizedText.length; index++) {
+        const reachedEnd = index === normalizedText.length;
+        if (!reachedEnd && normalizedText[index] !== ',') continue;
+
+        const candidate = normalizedText.slice(parameterStartIndex, index).trim();
+        if (!isCompleteMyBatisParameter(candidate)) continue;
+
+        parameters.push(formatMyBatisParameter(candidate));
+        parameterStartIndex = index + 1;
+    }
+
+    const unparsedText = normalizedText.slice(parameterStartIndex).trim();
+    if (unparsedText) throw new Error(`无法解析参数：${unparsedText}`);
+    return parameters;
+}
+
+// 在替换前强制校验数量，避免输出仍含真实占位符却提示成功。
+function replaceSqlPlaceholders(sql, parameters) {
+    const placeholderCount = countSqlPlaceholders(sql);
+    if (placeholderCount !== parameters.length) {
+        throw new Error(`SQL 占位符数量 ${placeholderCount} 与参数数量 ${parameters.length} 不一致`);
+    }
+
+    let outputSql = '';
+    let parameterIndex = 0;
+    let index = 0;
+    while (index < sql.length) {
+        const protectedEndIndex = getSqlProtectedSegmentEnd(sql, index);
+        if (protectedEndIndex > index) {
+            outputSql += sql.slice(index, protectedEndIndex);
+            index = protectedEndIndex;
+            continue;
+        }
+        if (sql[index] === '?') {
+            outputSql += parameters[parameterIndex];
+            parameterIndex++;
+        } else {
+            outputSql += sql[index];
+        }
+        index++;
+    }
+    return outputSql;
+}
+
+function ensureSqlSemicolon(sql) {
+    return sql.trim().endsWith(';') ? sql.trim() : `${sql.trim()};`;
+}
+
+// 成对解析 Preparing 与 Parameters，任一数量错误都会终止整次转换。
+function parseMyBatisLog(logText) {
+    const preparingPattern = /==>\s+Preparing:\s+(.+)/;
+    const parametersPattern = /==>\s+Parameters:\s*(.*)/;
+    const outputStatements = [];
+    let pendingSql = null;
+
+    String(logText).split(/\r?\n/).forEach(line => {
+        const preparingMatch = line.match(preparingPattern);
+        if (preparingMatch) {
+            if (pendingSql !== null) {
+                const pendingPlaceholderCount = countSqlPlaceholders(pendingSql);
+                if (pendingPlaceholderCount > 0) {
+                    throw new Error(`SQL 缺少 Parameters，仍有 ${pendingPlaceholderCount} 个占位符`);
+                }
+                outputStatements.push(ensureSqlSemicolon(pendingSql));
+            }
+            pendingSql = preparingMatch[1].trim();
+            return;
+        }
+
+        const parametersMatch = line.match(parametersPattern);
+        if (!parametersMatch || pendingSql === null) return;
+
+        const parameters = parseMyBatisParameters(parametersMatch[1]);
+        outputStatements.push(ensureSqlSemicolon(replaceSqlPlaceholders(pendingSql, parameters)));
+        pendingSql = null;
+    });
+
+    if (pendingSql !== null) {
+        const pendingPlaceholderCount = countSqlPlaceholders(pendingSql);
+        if (pendingPlaceholderCount > 0) {
+            throw new Error(`SQL 缺少 Parameters，仍有 ${pendingPlaceholderCount} 个占位符`);
+        }
+        outputStatements.push(ensureSqlSemicolon(pendingSql));
+    }
+
+    return outputStatements.join('\n\n');
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        QR_DEFAULT_SIZE,
+        QR_MAX_CHUNKS,
+        QR_MAX_DECODE_PIXELS,
+        QR_MAX_DECODE_SIDE,
+        QR_MAX_INPUT_BYTES,
+        QR_MAX_UPLOAD_BYTES,
+        createQrGroupId,
+        countSqlPlaceholders,
+        fetchJsonWithTimeout,
+        formatJsonFieldValue,
+        formatShanghaiDateTime,
+        getJsonFieldKind,
+        getQrByteLength,
+        getQrDecodeDimensions,
+        parseInsertStatement,
+        parseJsonFieldValue,
+        parseMyBatisLog,
+        parseMyBatisParameters,
+        parseQrSize,
+        parseShanghaiDateTimeLocal,
+        prepareQrPayloads,
+        replaceSqlPlaceholders,
+        rewriteInsertStatement,
+        rewriteInsertStatements,
+        selectQrOutputNode,
+        splitSqlStatements,
+        splitTextByByteLength,
+        validateQrUploadSize
+    };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // 状态变量
     let currentInput = '';
@@ -5,7 +775,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // DOM 元素获取
     const navItems = document.querySelectorAll('.nav-item');
     const pages = document.querySelectorAll('.tool-page');
-    const pageTitle = document.getElementById('page-title');
     
     const jsonInput = document.getElementById('json-input');
     const jsonOutput = document.getElementById('json-output');
@@ -23,26 +792,44 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---------------------------------------------------------
     const LS_LAST_PAGE = 'toolbox_last_page';
 
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            // 移除所有激活状态
-            navItems.forEach(nav => nav.classList.remove('active'));
-            pages.forEach(page => page.classList.remove('active'));
+    const activateNavigationItem = (item) => {
+        navItems.forEach(nav => {
+            nav.classList.remove('active');
+            nav.removeAttribute('aria-current');
+        });
+        pages.forEach(page => page.classList.remove('active'));
 
-            // 激活当前项
-            item.classList.add('active');
-            const targetId = item.getAttribute('data-target');
-            const targetPage = document.getElementById(`page-${targetId}`);
-            if (targetPage) {
-                targetPage.classList.add('active');
+        item.classList.add('active');
+        item.setAttribute('aria-current', 'page');
+
+        const targetId = item.getAttribute('data-target');
+        const targetPage = document.getElementById(`page-${targetId}`);
+        if (targetPage) {
+            targetPage.classList.add('active');
+        }
+
+        try {
+            localStorage.setItem(LS_LAST_PAGE, targetId);
+        } catch (error) {
+            console.warn('无法保存上次访问页面:', error);
+        }
+    };
+
+    navItems.forEach(item => {
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+        if (item.classList.contains('active')) {
+            item.setAttribute('aria-current', 'page');
+        }
+
+        item.addEventListener('click', () => activateNavigationItem(item));
+        item.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+                return;
             }
 
-            // 更新标题
-            const text = item.querySelector('span').textContent;
-            pageTitle.textContent = text + '工具';
-
-            // 记住当前页（下次打开自动恢复）
-            try { localStorage.setItem(LS_LAST_PAGE, targetId); } catch {}
+            event.preventDefault();
+            activateNavigationItem(item);
         });
     });
 
@@ -55,7 +842,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!item) return;
             if (item.style.display === 'none') return; // 离线被隐藏的不恢复
             item.click();
-        } catch {}
+        } catch (error) {
+            console.warn('无法恢复上次访问页面:', error);
+        }
     }, 500);
 
     // ---------------------------------------------------------
@@ -93,12 +882,108 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnQrDownload = document.getElementById('btn-qr-download');
     const btnQrClear = document.getElementById('btn-qr-clear');
     
-    const qrPreviewArea = document.getElementById('qr-preview-area');
     const qrPlaceholder = document.getElementById('qr-placeholder');
     const qrcodeContainer = document.getElementById('qrcode-container');
     const barcodeImg = document.getElementById('barcode-img');
 
-    let currentQrObject = null;
+    let lastGeneratedCodeType = null;
+
+    // 按容错等级从高到低尝试，长文本优先保证可以生成二维码
+    const getQrCorrectLevelOptions = () => ([
+        { label: '高容错', value: QRCode.CorrectLevel.H },
+        { label: '较高容错', value: QRCode.CorrectLevel.Q },
+        { label: '中等容错', value: QRCode.CorrectLevel.M },
+        { label: '低容错', value: QRCode.CorrectLevel.L }
+    ]);
+
+    // 使用自动版本号和指定容错等级生成二维码，分片阶段复用预检结果。
+    const createQrCodeAtCorrectLevel = (targetElement, content, size, colorDark, colorLight, correctLevelOption) => {
+        targetElement.innerHTML = '';
+        new QRCode(targetElement, {
+            text: content,
+            width: size,
+            height: size,
+            colorDark: colorDark,
+            colorLight: colorLight,
+            typeNumber: 0,
+            correctLevel: correctLevelOption.value
+        });
+        return correctLevelOption;
+    };
+
+    // 按容错等级逐级预检，普通二维码只保留成功结果。
+    const createAutoVersionQrCode = (targetElement, content, size, colorDark, colorLight) => {
+        let lastError = null;
+
+        for (const correctLevelOption of getQrCorrectLevelOptions()) {
+            try {
+                return createQrCodeAtCorrectLevel(
+                    targetElement,
+                    content,
+                    size,
+                    colorDark,
+                    colorLight,
+                    correctLevelOption
+                );
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        throw lastError || new Error('内容过长，无法生成二维码');
+    };
+
+    // 超长内容自动分片生成多个二维码，二维码本身最大容量无法继续扩大。
+    const createSplitQrCodes = (content, size, colorDark, colorLight) => {
+        let chunkByteLength = 1200;
+        let lastError = null;
+
+        while (chunkByteLength >= 100) {
+            const prepared = prepareQrPayloads(content, chunkByteLength);
+            const longestPayload = prepared.payloads.reduce((longest, payload) =>
+                getQrByteLength(payload) > getQrByteLength(longest) ? payload : longest, prepared.payloads[0]);
+            const testContainer = document.createElement('div');
+
+            try {
+                const correctLevelOption = createAutoVersionQrCode(testContainer, longestPayload, size, colorDark, colorLight);
+                qrcodeContainer.replaceChildren();
+
+                prepared.payloads.forEach((payload, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'qr-chunk-item';
+                    const qrBox = document.createElement('div');
+                    qrBox.className = 'qr-code-box';
+                    const label = document.createElement('div');
+
+                    label.textContent = `第 ${index + 1} / ${prepared.chunks.length} 张 · 组 ${prepared.groupId}`;
+                    label.style.color = 'var(--text-secondary)';
+                    label.style.fontSize = '0.8rem';
+
+                    createQrCodeAtCorrectLevel(
+                        qrBox,
+                        payload,
+                        size,
+                        colorDark,
+                        colorLight,
+                        correctLevelOption
+                    );
+                    item.appendChild(qrBox);
+                    item.appendChild(label);
+                    qrcodeContainer.appendChild(item);
+                });
+
+                qrcodeContainer.classList.add('qr-chunk-grid');
+                qrcodeContainer.style.display = 'grid';
+
+                return { ...prepared, correctLevelOption };
+            } catch (error) {
+                lastError = error;
+                chunkByteLength = Math.floor(chunkByteLength * 0.8);
+            }
+        }
+
+        throw lastError || new Error('内容过长，无法分片生成二维码');
+    };
 
     if (btnQrGenerate) {
         btnQrGenerate.addEventListener('click', () => {
@@ -109,34 +994,56 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const type = qrType.value;
-            const size = parseInt(qrSize.value) || 200;
+            let size;
+            try {
+                size = parseQrSize(qrSize.value);
+            } catch (error) {
+                showToast(error.message, 'error');
+                return;
+            }
             const colorDark = qrColorDark.value;
             const colorLight = qrColorLight.value;
 
             // 重置显示
             qrPlaceholder.style.display = 'none';
             qrcodeContainer.innerHTML = '';
+            qrcodeContainer.classList.remove('qr-chunk-grid');
             qrcodeContainer.style.display = 'none';
             barcodeImg.style.display = 'none';
+            lastGeneratedCodeType = null;
 
             if (type === 'qrcode') {
                 if (typeof QRCode === 'undefined') {
                     showToast('QRCode 库未加载，请检查 lib/qrcode.min.js', 'error');
                     return;
                 }
+                const inputBytes = getQrByteLength(content);
+                if (inputBytes > QR_MAX_INPUT_BYTES) {
+                    qrPlaceholder.style.display = 'block';
+                    showToast(`输入 ${inputBytes} 字节，超过上限 ${QR_MAX_INPUT_BYTES} 字节`, 'error');
+                    return;
+                }
                 qrcodeContainer.style.display = 'block';
                 try {
-                    currentQrObject = new QRCode(qrcodeContainer, {
-                        text: content,
-                        width: size,
-                        height: size,
-                        colorDark : colorDark,
-                        colorLight : colorLight,
-                        correctLevel : QRCode.CorrectLevel.H
-                    });
-                    showToast('二维码生成成功', 'success');
+                    qrcodeContainer.style.display = 'block';
+                    qrcodeContainer.style.flexWrap = '';
+                    qrcodeContainer.style.justifyContent = '';
+                    qrcodeContainer.style.gap = '';
+                    const correctLevelOption = createAutoVersionQrCode(qrcodeContainer, content, size, colorDark, colorLight);
+                    lastGeneratedCodeType = 'qrcode';
+                    showToast(`二维码生成成功（${correctLevelOption.label}）`, 'success');
                 } catch (e) {
-                    showToast('生成失败: ' + e.message, 'error');
+                    try {
+                        const splitResult = createSplitQrCodes(content, size, colorDark, colorLight);
+                        lastGeneratedCodeType = 'qrcode';
+                        showToast(`内容已自动拆成 ${splitResult.chunks.length} 个二维码`, 'warning');
+                    } catch (splitError) {
+                        qrcodeContainer.innerHTML = '';
+                        qrcodeContainer.style.display = 'none';
+                        qrPlaceholder.style.display = 'block';
+                        lastGeneratedCodeType = null;
+                        showToast('生成失败: ' + splitError.message, 'error');
+                    }
                 }
             } else {
                 if (typeof JsBarcode === 'undefined') {
@@ -153,8 +1060,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         lineColor: colorDark,
                         background: colorLight
                     });
+                    lastGeneratedCodeType = 'barcode';
                     showToast('条形码生成成功', 'success');
                 } catch (e) {
+                    barcodeImg.src = '';
+                    lastGeneratedCodeType = null;
                     showToast('生成失败: 内容可能不符合条形码规范', 'error');
                 }
             }
@@ -163,33 +1073,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnQrDownload) {
         btnQrDownload.addEventListener('click', () => {
-            let imgUrl = null;
+            const imgUrls = [];
             
-            if (qrType.value === 'qrcode') {
-                // QRCode.js 生成的是 canvas 或 img
-                const img = qrcodeContainer.querySelector('img');
-                const canvas = qrcodeContainer.querySelector('canvas');
-                
-                if (img && img.src) {
-                    imgUrl = img.src;
-                } else if (canvas) {
-                    imgUrl = canvas.toDataURL("image/png");
-                }
-            } else {
-                // JsBarcode 生成的是 img (我们用的是 img 标签)
+            if (lastGeneratedCodeType === 'qrcode') {
+                const qrBoxes = qrcodeContainer.querySelectorAll('.qr-code-box');
+                const outputContainers = qrBoxes.length ? Array.from(qrBoxes) : [qrcodeContainer];
+                outputContainers.forEach(container => {
+                    const outputNode = selectQrOutputNode(container);
+                    if (!outputNode) return;
+                    if (outputNode.tagName === 'CANVAS') imgUrls.push(outputNode.toDataURL('image/png'));
+                    else if (outputNode.src) imgUrls.push(outputNode.src);
+                });
+            } else if (lastGeneratedCodeType === 'barcode') {
+                // JsBarcode 生成的是 img，我们用的是 img 标签
                 if (barcodeImg.src) {
-                    imgUrl = barcodeImg.src;
+                    imgUrls.push(barcodeImg.src);
                 }
             }
 
-            if (imgUrl) {
-                const link = document.createElement('a');
-                link.download = `code_${Date.now()}.png`;
-                link.href = imgUrl;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                showToast('下载已开始', 'success');
+            if (imgUrls.length) {
+                imgUrls.forEach((imgUrl, index) => {
+                    const link = document.createElement('a');
+                    link.download = imgUrls.length > 1 ? `code_${Date.now()}_${index + 1}.png` : `code_${Date.now()}.png`;
+                    link.href = imgUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                });
+                showToast(imgUrls.length > 1 ? `已开始下载 ${imgUrls.length} 张图片` : '下载已开始', 'success');
             } else {
                 showToast('请先生成图片', 'warning');
             }
@@ -200,15 +1111,18 @@ document.addEventListener('DOMContentLoaded', () => {
         btnQrClear.addEventListener('click', () => {
             qrInput.value = '';
             qrcodeContainer.innerHTML = '';
+            qrcodeContainer.classList.remove('qr-chunk-grid');
             qrcodeContainer.style.display = 'none';
             barcodeImg.style.display = 'none';
             barcodeImg.src = '';
+            lastGeneratedCodeType = null;
             qrPlaceholder.style.display = 'block';
             // 清空解析结果
             const qrDecodeResult = document.getElementById('qr-decode-result');
             const qrDecodeText = document.getElementById('qr-decode-text');
             if (qrDecodeResult) qrDecodeResult.style.display = 'none';
             if (qrDecodeText) qrDecodeText.textContent = '';
+            if (qrDecodeInput) qrDecodeInput.value = '';
             showToast('已清空', 'info');
         });
     }
@@ -223,42 +1137,52 @@ document.addEventListener('DOMContentLoaded', () => {
             const file = qrDecodeInput.files[0];
             if (!file) return;
 
-            // 检查jsQR库是否加载
+            // 重置 input 允许重复选择同一个文件。
+            qrDecodeInput.value = '';
+
             if (typeof jsQR === 'undefined') {
-                showToast('二维码解析库未加载，请下载完整的jsQR.js库', 'error');
+                showToast('二维码解析库未加载，请下载完整的 jsQR.js 库', 'error');
                 console.error('请从 https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js 下载完整库');
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = new Image();
-                img.onload = () => {
-                    try {
-                        // 创建 canvas 进行图像处理
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        ctx.drawImage(img, 0, 0);
+            try {
+                // 文件大小必须在读取前校验，避免无效的大文件进入解码流程。
+                validateQrUploadSize(file.size);
+            } catch (error) {
+                showToast(error.message, 'error');
+                return;
+            }
 
-                        // 获取图像数据
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        
-                        // 调用jsQR解析
+            const reader = new FileReader();
+            reader.onload = event => {
+                const image = new Image();
+                image.onload = () => {
+                    try {
+                        const sourceWidth = image.naturalWidth || image.width;
+                        const sourceHeight = image.naturalHeight || image.height;
+                        const decodeDimensions = getQrDecodeDimensions(sourceWidth, sourceHeight);
+
+                        // 只分配缩放后的安全 Canvas，禁止先按原图尺寸分配再缩小。
+                        const canvas = document.createElement('canvas');
+                        canvas.width = decodeDimensions.width;
+                        canvas.height = decodeDimensions.height;
+                        const context = canvas.getContext('2d', { willReadFrequently: true });
+                        context.drawImage(image, 0, 0, decodeDimensions.width, decodeDimensions.height);
+
+                        const imageData = context.getImageData(0, 0, decodeDimensions.width, decodeDimensions.height);
                         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                            inversionAttempts: "dontInvert",
+                            inversionAttempts: 'attemptBoth'
                         });
 
-                        if (code && code.data) {
-                            // 解析成功
-                            qrDecodeText.textContent = code.data;
+                        if (code?.data) {
+                            // qrcode.js 为非 ASCII 内容保留 UTF-8 BOM，展示时去掉前导标记。
+                            const decodedData = code.data.replace(/^\uFEFF/, '');
+                            qrDecodeText.textContent = decodedData;
                             qrDecodeResult.style.display = 'block';
-                            // 同时填充到输入框
-                            qrInput.value = code.data;
+                            qrInput.value = decodedData;
                             showToast('二维码解析成功', 'success');
                         } else {
-                            // 未找到二维码
                             showToast('未能识别二维码，请确保图片清晰且包含二维码', 'warning');
                         }
                     } catch (error) {
@@ -266,18 +1190,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast('解析失败: ' + error.message, 'error');
                     }
                 };
-                img.onerror = () => {
+                image.onerror = () => {
                     showToast('图片加载失败', 'error');
                 };
-                img.src = e.target.result;
+                image.src = event.target.result;
             };
             reader.onerror = () => {
                 showToast('文件读取失败', 'error');
             };
             reader.readAsDataURL(file);
-
-            // 重置 input 允许重复选择
-            qrDecodeInput.value = '';
         });
     }
 
@@ -296,46 +1217,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 提取第一条 SQL 进行解析
-            // 假设格式：INSERT INTO `table` (`col1`, `col2`) VALUES ...
-            const lines = content.split('\n');
-            let firstSql = '';
-            for (const line of lines) {
-                if (line.trim().toUpperCase().startsWith('INSERT INTO')) {
-                    firstSql = line.trim();
-                    break;
-                }
-            }
-
-            if (!firstSql) {
+            const firstInsertStatement = splitSqlStatements(content).find(isInsertSqlStatement);
+            if (!firstInsertStatement) {
                 showToast('未找到有效的 INSERT INTO 语句', 'warning');
                 return;
             }
 
-            // 解析表名和列名
-            // 正则：INSERT INTO `?(\S+)`?\s*\((.+)\)\s*VALUES
-            const match = firstSql.match(/INSERT\s+INTO\s+(.+?)\s*\((.+?)\)\s*VALUES/i);
-            if (!match) {
-                showToast('无法识别 SQL 结构，请确保包含表名和列名定义', 'error');
-                return;
-            }
+            try {
+                const parsedStatement = parseInsertStatement(firstInsertStatement);
+                parsedTableName = parsedStatement.tableToken;
+                parsedColumns = parsedStatement.columns.map(column => column.raw);
 
-            parsedTableName = match[1];
-            const columnsStr = match[2];
-            
-            // 更新 UI 显示
-            if (currentTableNameSpan) {
-                currentTableNameSpan.textContent = parsedTableName;
+                if (currentTableNameSpan) currentTableNameSpan.textContent = parsedTableName;
+                renderColumnSelector();
+                columnSelector.style.display = 'block';
+                showToast('列名识别成功，请勾选要删除的字段', 'success');
+            } catch (error) {
+                showToast('无法识别 SQL 结构：' + error.message, 'error');
             }
-            
-            // 分割列名,处理三种引号:`col`(MySQL) / [col](SQL Server / 达梦) / "col"(标准)
-            // 用 splitSqlValues 顺便处理掉列名内含括号/逗号的极端情况
-            parsedColumns = splitSqlValues(columnsStr).map(c => c.trim());
-            
-            // 渲染选择区
-            renderColumnSelector();
-            columnSelector.style.display = 'block';
-            showToast('列名识别成功，请勾选要删除的字段', 'success');
         });
     }
 
@@ -386,49 +1285,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 获取要删除的列索引
+            // 把首条语句中的选择转换为列名，后续每条 SQL 按自己的列序匹配。
             const checkboxes = columnList.querySelectorAll('input[type="checkbox"]');
-            const indicesToRemove = new Set();
-            checkboxes.forEach(cb => {
-                if (cb.checked) {
-                    indicesToRemove.add(parseInt(cb.value));
-                }
+            const columnNamesToRemove = [];
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) columnNamesToRemove.push(parsedColumns[Number(checkbox.value)]);
             });
 
-            // 获取新表名（如果启用了替换）
-            let targetTableName = parsedTableName;
+            let targetTableName = '';
             if (enableRenameTable && enableRenameTable.checked) {
                 const newName = newTableNameInput.value.trim();
-                if (newName) {
-                    targetTableName = newName;
-                }
+                if (newName) targetTableName = newName;
             }
 
-            // 开始处理
             const content = cleanerInput.value.trim();
-            const lines = content.split('\n'); // 简单按行分割，假设一行一条SQL
-            const results = [];
+            const result = rewriteInsertStatements(content, columnNamesToRemove, targetTableName);
 
-            for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine) continue;
-                if (!trimmedLine.toUpperCase().startsWith('INSERT INTO')) {
-                    results.push(trimmedLine); // 不是 INSERT 语句，保持原样
-                    continue;
-                }
-
-                try {
-                    results.push(processInsertSql(trimmedLine, indicesToRemove, targetTableName));
-                } catch (e) {
-                    results.push(`/* Error processing: ${e.message} */\n${trimmedLine}`);
-                }
-            }
-
-            // 显示结果
             cleanerPlaceholder.style.display = 'none';
             cleanerOutput.style.display = 'block';
-            cleanerOutput.textContent = results.join('\n');
-            showToast('生成成功', 'success');
+            cleanerOutput.textContent = result.sql;
+
+            const summary = `处理完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`;
+            showToast(summary, result.failureCount > 0 ? 'warning' : 'success');
         });
     }
 
@@ -820,19 +1698,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 收集表单数据
-            const newItem = collectFormData();
-            collectedJsonItems.push(newItem);
-
-            // 显示结果
-            const resultArray = collectedJsonItems;
-            const formatted = JSON.stringify(resultArray, null, 4);
-            updateOutput(formatted, true);
-            
-            // 清空表单
-            clearJsonFieldsForm();
-            
-            showToast(`已添加第 ${collectedJsonItems.length} 个对象`, 'success');
+            try {
+                // 先完整解析临时对象，全部字段成功后才修改原数组。
+                const newItem = collectFormData();
+                collectedJsonItems.push(newItem);
+                updateOutput(JSON.stringify(collectedJsonItems, null, 4), true);
+                clearJsonFieldsForm();
+                showToast(`已添加第 ${collectedJsonItems.length} 个对象`, 'success');
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
         });
     }
 
@@ -844,7 +1719,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         Object.keys(obj).forEach(key => {
             const value = obj[key];
-            const fieldType = typeof value;
+            const fieldKind = getJsonFieldKind(value);
             
             // 创建字段容器
             const fieldDiv = document.createElement('div');
@@ -857,41 +1732,39 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 输入框
             let input;
-            if (fieldType === 'boolean') {
+            if (fieldKind === 'boolean') {
                 // 布尔类型使用下拉框
                 input = document.createElement('select');
                 input.innerHTML = '<option value="true">true</option><option value="false">false</option>';
-                input.value = value.toString();
-            } else if (fieldType === 'number') {
+            } else if (fieldKind === 'number') {
                 // 数字类型
                 input = document.createElement('input');
                 input.type = 'number';
-                input.value = value;
                 input.step = 'any';
-            } else if (fieldType === 'object' && value === null) {
-                // null类型
-                input = document.createElement('input');
-                input.type = 'text';
-                input.placeholder = 'null 或输入值';
-                input.value = '';
+            } else if (fieldKind === 'object' || fieldKind === 'array') {
+                // 嵌套对象和数组使用多行 JSON 编辑框。
+                input = document.createElement('textarea');
+                input.rows = 5;
             } else {
-                // 字符串类型
                 input = document.createElement('input');
                 input.type = 'text';
-                input.value = value || '';
+                if (fieldKind === 'null') input.placeholder = 'null 或输入值';
             }
-            
+
+            input.value = formatJsonFieldValue(value);
             input.dataset.fieldName = key;
-            input.dataset.fieldType = fieldType;
+            input.dataset.fieldKind = fieldKind;
             input.style.cssText = `
                 width: 100%;
-                padding: 8px;
+                padding: 0.5rem;
                 background: var(--bg-dark);
                 color: var(--text-primary);
                 border: 1px solid var(--border-color);
-                border-radius: 4px;
+                border-radius: 0.25rem;
                 outline: none;
-                font-size: 13px;
+                font-size: 0.8125rem;
+                box-sizing: border-box;
+                resize: vertical;
             `;
             
             fieldDiv.appendChild(label);
@@ -905,23 +1778,11 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     function collectFormData() {
         const result = {};
-        const inputs = jsonFieldsContainer.querySelectorAll('input, select');
+        const inputs = jsonFieldsContainer.querySelectorAll('input, select, textarea');
         
         inputs.forEach(input => {
             const fieldName = input.dataset.fieldName;
-            const fieldType = input.dataset.fieldType;
-            let value = input.value;
-            
-            // 类型转换
-            if (fieldType === 'number') {
-                value = value === '' ? 0 : parseFloat(value);
-            } else if (fieldType === 'boolean') {
-                value = value === 'true';
-            } else if (fieldType === 'object' && (value === '' || value === 'null')) {
-                value = null;
-            }
-            
-            result[fieldName] = value;
+            result[fieldName] = parseJsonFieldValue(input.value, input.dataset.fieldKind, fieldName);
         });
         
         return result;
@@ -931,13 +1792,17 @@ document.addEventListener('DOMContentLoaded', () => {
      * 清空表单
      */
     function clearJsonFieldsForm() {
-        const inputs = jsonFieldsContainer.querySelectorAll('input, select');
+        const inputs = jsonFieldsContainer.querySelectorAll('input, select, textarea');
         inputs.forEach(input => {
-            const fieldType = input.dataset.fieldType;
+            const fieldKind = input.dataset.fieldKind;
             if (input.tagName === 'SELECT') {
                 input.selectedIndex = 0;
-            } else if (fieldType === 'number') {
+            } else if (fieldKind === 'number') {
                 input.value = '0';
+            } else if (fieldKind === 'object') {
+                input.value = '{}';
+            } else if (fieldKind === 'array') {
+                input.value = '[]';
             } else {
                 input.value = '';
             }
@@ -975,6 +1840,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (e) {
                 console.error(e);
+                sqlOutput.textContent = '';
+                sqlOutput.style.display = 'none';
+                sqlPlaceholder.style.display = 'flex';
                 showToast('解析出错: ' + e.message, 'error');
             }
         });
@@ -1001,7 +1869,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function parseMyBatisLog(logText) {
+    function parseMyBatisLogLegacy(logText) {
         const lines = logText.split('\n');
         const results = [];
         let currentSql = null;
@@ -1168,313 +2036,6 @@ document.addEventListener('DOMContentLoaded', () => {
             i++;
         }
         return out;
-    }
-
-    // ---------------------------------------------------------
-    // 补票号码分解工具逻辑
-    // ---------------------------------------------------------
-    const nffFileInput = document.getElementById('nff-file-input');
-    const nffFileName = document.getElementById('nff-file-name');
-    const nffRows = document.getElementById('nff-rows');
-    const nffCols = document.getElementById('nff-cols');
-    const nffTemplateNum = document.getElementById('nff-template-num');
-    const btnNffGenerate = document.getElementById('btn-nff-generate');
-    const nffMessage = document.getElementById('nff-message');
-
-    let nffOriginalSortedJNumbersCache = null;
-    let nffOriginalFileNameBaseCache = "output";
-
-    if (nffFileInput) {
-        nffFileInput.addEventListener('change', () => {
-            const file = nffFileInput.files[0];
-            if (file) {
-                nffFileName.textContent = file.name;
-                nffFileName.style.color = 'var(--text-primary)';
-                
-                // 启用按钮
-                btnNffGenerate.disabled = false;
-                
-                // 重置模板套数
-                nffTemplateNum.value = 1;
-                
-                // 缓存清理
-                nffOriginalSortedJNumbersCache = null;
-                const lastDotIndex = file.name.lastIndexOf('.');
-                nffOriginalFileNameBaseCache = lastDotIndex === -1 ? file.name : file.name.substring(0, lastDotIndex);
-                
-                updateNffTemplateMax();
-                displayNffMessage(''); // 清空消息
-            } else {
-                nffFileName.textContent = '未选择文件';
-                nffFileName.style.color = 'var(--text-secondary)';
-                
-                // 禁用按钮
-                btnNffGenerate.disabled = true;
-            }
-        });
-    }
-
-    if (nffRows) nffRows.addEventListener('input', updateNffTemplateMax);
-    if (nffCols) nffCols.addEventListener('input', updateNffTemplateMax);
-
-    function updateNffTemplateMax() {
-        const rows = parseInt(nffRows.value, 10) || 1;
-        const cols = parseInt(nffCols.value, 10) || 1;
-        const maxTemplates = rows * cols;
-        nffTemplateNum.max = maxTemplates;
-        if (parseInt(nffTemplateNum.value, 10) > maxTemplates) {
-            nffTemplateNum.value = maxTemplates;
-        }
-    }
-
-    function displayNffMessage(message, type = "success") {
-        if (!message) {
-            nffMessage.style.display = 'none';
-            return;
-        }
-        nffMessage.style.display = 'block';
-        nffMessage.textContent = message;
-        
-        if (type === 'error') {
-            nffMessage.style.background = 'var(--danger-color)'; // 背景改淡一点比较好，这里简单处理
-            nffMessage.style.backgroundColor = 'rgba(245, 108, 108, 0.1)';
-            nffMessage.style.color = 'var(--danger-color)';
-            nffMessage.style.border = '1px solid var(--danger-color)';
-        } else {
-            nffMessage.style.backgroundColor = 'rgba(103, 194, 58, 0.1)';
-            nffMessage.style.color = 'var(--success-color)';
-            nffMessage.style.border = '1px solid var(--success-color)';
-        }
-    }
-
-    if (btnNffGenerate) {
-        btnNffGenerate.addEventListener('click', async () => {
-            const rowsPerSheet = parseInt(nffRows.value, 10);
-            const colsPerSheet = parseInt(nffCols.value, 10);
-            const templateNumber = parseInt(nffTemplateNum.value, 10);
-
-            if (!rowsPerSheet || rowsPerSheet < 1 || !colsPerSheet || colsPerSheet < 1) {
-                 showToast('错误：行列数必须是大于0的整数。', 'error');
-                 return;
-            }
-            if (isNaN(templateNumber) || templateNumber < 1) {
-                showToast('错误：请输入一个有效的模板套数 (必须大于等于1)。', 'error');
-                return;
-            }
-
-            displayNffMessage('正在读取和排序号码...', 'success');
-            
-            // 开始处理
-            try {
-                const dataResult = await getNffSortedJNumbers();
-                if (!dataResult) return;
-                
-                const { sortedJNumbers: originalSortedJNumbers, fileNameBase } = dataResult;
-                
-                const shiftAmount = templateNumber - 1;
-                const formatIdentifier = templateNumber;
-                const itemsPerSheet = rowsPerSheet * colsPerSheet;
-                const calculatedNumSheets = (originalSortedJNumbers.length > 0) 
-                    ? Math.ceil(originalSortedJNumbers.length / itemsPerSheet) 
-                    : 0;
-
-                displayNffMessage('正在生成矩阵...', 'success');
-                let sheetsData = populateSheetsData([...originalSortedJNumbers], calculatedNumSheets, rowsPerSheet, colsPerSheet);
-                if (shiftAmount > 0) {
-                    sheetsData = applyIntraSheetCircularShift(sheetsData, rowsPerSheet, colsPerSheet, shiftAmount);
-                }
-                
-                const outputContent = formatSheetsToString(sheetsData, calculatedNumSheets, rowsPerSheet, colsPerSheet, fileNameBase, formatIdentifier, true);
-                const downloadFileName = `${fileNameBase}_${formatIdentifier}_1_${calculatedNumSheets}.nff`;
-                
-                let message = `模板 ${templateNumber}`;
-                if (shiftAmount > 0) {
-                    message += ` (位移 ${shiftAmount} 位)`;
-                }
-                message += ' 文件已生成!';
-                
-                if (originalSortedJNumbers.length === 0) {
-                    displayNffMessage('文件中没有有效的号码数据，已生成空文件头。', 'success');
-                } else {
-                    displayNffMessage(message, 'success');
-                }
-                showToast('生成成功', 'success');
-
-                downloadFile(outputContent, downloadFileName);
-                
-                // 自动增加模板套数
-                const maxVal = parseInt(nffTemplateNum.max, 10);
-                if (templateNumber < maxVal) {
-                    nffTemplateNum.value = templateNumber + 1;
-                }
-
-            } catch (e) {
-                displayNffMessage('处理失败: ' + e.message, 'error');
-                console.error(e);
-            }
-        });
-    }
-
-    function getNffSortedJNumbers() {
-        if (nffOriginalSortedJNumbersCache) {
-            return Promise.resolve({ sortedJNumbers: [...nffOriginalSortedJNumbersCache], fileNameBase: nffOriginalFileNameBaseCache });
-        }
-
-        if (nffFileInput.files.length === 0) {
-            showToast('请先选择一个文件。', 'warning');
-            return Promise.resolve(null);
-        }
-        const file = nffFileInput.files[0];
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const content = e.target.result;
-                    const lines = content.split(/\r?\n/);
-                    let jNumbers = lines.map(line => line.trim().replace(/;$/, ''))
-                                        .filter(line => line !== '' && !line.startsWith('#') && !line.startsWith('['));
-
-                    if (jNumbers.length === 0) {
-                        resolve({ sortedJNumbers: [], fileNameBase: nffOriginalFileNameBaseCache });
-                        return;
-                    }
-
-                    jNumbers.sort((a, b) => {
-                        const tryParseA = a.match(/([A-Za-z]+)(\d+)/);
-                        const tryParseB = b.match(/([A-Za-z]+)(\d+)/);
-
-                        if (tryParseA && tryParseB) {
-                            const [, aLetter, aNumStr] = tryParseA;
-                            const [, bLetter, bNumStr] = tryParseB;
-                            const aNum = parseInt(aNumStr, 10);
-                            const bNum = parseInt(bNumStr, 10);
-
-                            if (aLetter.toUpperCase() < bLetter.toUpperCase()) return -1;
-                            if (aLetter.toUpperCase() > bLetter.toUpperCase()) return 1;
-                            return aNum - bNum;
-                        }
-                        return a.localeCompare(b);
-                    });
-                    nffOriginalSortedJNumbersCache = [...jNumbers];
-                    resolve({ sortedJNumbers: jNumbers, fileNameBase: nffOriginalFileNameBaseCache });
-                } catch (error) {
-                    reject(error);
-                }
-            };
-            reader.onerror = function() {
-                reject(new Error('FileReader error'));
-            };
-            reader.readAsText(file);
-        });
-    }
-
-    function populateSheetsData(jNumListToFill, numTargetSheets, rowsPerSheet, colsPerSheet) {
-        let sheets = Array.from({ length: numTargetSheets }, () => 
-            Array.from({ length: rowsPerSheet }, () => 
-                Array(colsPerSheet).fill("----------")
-            )
-        );
-        let currentJNumberIndex = 0;
-        const totalJNumbersInList = jNumListToFill.length;
-
-        for (let colGroup = 0; colGroup < colsPerSheet; colGroup++) {
-            for (let row = 0; row < rowsPerSheet; row++) {
-                for (let sheetIdx = 0; sheetIdx < numTargetSheets; sheetIdx++) {
-                    if (currentJNumberIndex < totalJNumbersInList) {
-                        const actualCol = colsPerSheet - 1 - colGroup;
-                        sheets[sheetIdx][row][actualCol] = jNumListToFill[currentJNumberIndex];
-                        currentJNumberIndex++;
-                    }
-                }
-            }
-        }
-        return sheets;
-    }
-    
-    function applyIntraSheetCircularShift(sheets, rowsPerSheet, colsPerSheet, shiftAmount) {
-        if (shiftAmount === 0) return sheets;
-
-        const newSheets = [];
-        const itemsPerSheet = rowsPerSheet * colsPerSheet;
-        const effectiveShift = shiftAmount % itemsPerSheet;
-        
-        if (effectiveShift === 0) return JSON.parse(JSON.stringify(sheets));
-
-        for (const sheet of sheets) {
-            const linearizedData = [];
-            for (let col = colsPerSheet - 1; col >= 0; col--) {
-                for (let row = 0; row < rowsPerSheet; row++) {
-                    linearizedData.push(sheet[row][col]);
-                }
-            }
-            
-            let shiftedData = linearizedData;
-            if (linearizedData.length > 1) {
-                shiftedData = linearizedData.slice(effectiveShift).concat(linearizedData.slice(0, effectiveShift));
-            }
-
-            const newSheet = Array.from({ length: rowsPerSheet }, () => Array(colsPerSheet).fill("----------"));
-            let index = 0;
-            for (let col = colsPerSheet - 1; col >= 0; col--) {
-                for (let row = 0; row < rowsPerSheet; row++) {
-                    if (index < shiftedData.length) {
-                        newSheet[row][col] = shiftedData[index];
-                        index++;
-                    }
-                }
-            }
-            newSheets.push(newSheet);
-        }
-        return newSheets;
-    }
-
-    function formatSheetsToString(sheetsData, numSheetsInOutput, rowsPerSheet, colsPerSheet, jobNameBase, formatIdentifier, addNFFMHeaders = false) {
-        let outputContent = "";
-        const jobIdentifier = `${jobNameBase}_${formatIdentifier} 1..${numSheetsInOutput}`;
-
-        if (addNFFMHeaders) {
-            outputContent += "# NFFM test numbers\n";
-            outputContent += "# empty numbers will be represented by N/A\n";
-        }
-        
-        if (numSheetsInOutput === 0) {
-             const emptyJobIdentifier = `${jobNameBase}_${formatIdentifier} 1..0`;
-             outputContent += `[JOB],${emptyJobIdentifier}\n`;
-             outputContent += `[ROWS],${rowsPerSheet}\n`;
-             outputContent += `[COLS],${colsPerSheet}\n`;
-             outputContent += `[SHAFT],BOTH\n`;
-             return outputContent;
-        }
-
-        outputContent += `[JOB],${jobIdentifier}\n`;
-        outputContent += `[ROWS],${rowsPerSheet}\n`;
-        outputContent += `[COLS],${colsPerSheet}\n`;
-        outputContent += `[SHAFT],BOTH\n\n`;
-
-        for (let i = 0; i < numSheetsInOutput; i++) {
-            outputContent += `[SHEETNO],${i + 1}\n`;
-            if (sheetsData[i]) {
-                sheetsData[i].forEach(row => {
-                    outputContent += row.join(',') + "\n";
-                });
-            }
-            if (i < numSheetsInOutput - 1) {
-                outputContent += "\n";
-            }
-        }
-        return outputContent;
-    }
-
-    function downloadFile(content, fileName) {
-        const a = document.createElement('a');
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-        a.href = URL.createObjectURL(blob);
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(a.href);
     }
 
     // ---------------------------------------------------------
@@ -1682,7 +2243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnTsNow = document.getElementById('btn-ts-now');
     const btnTsClear = document.getElementById('btn-ts-clear');
     
-    const currentTimeDisplay = document.getElementById('current-time');
+    const currentTimeDisplay = document.getElementById('timestamp-current-time');
     const currentTimestampDisplay = document.getElementById('current-timestamp');
     
     const tsResultContainer = document.getElementById('ts-result-container');
@@ -1692,7 +2253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 更新当前时间显示
     function updateCurrentTime() {
         const now = new Date();
-        const beijingTime = formatBeijingTime(now);
+        const beijingTime = formatShanghaiDateTime(now).formatted;
         const timestamp = Math.floor(now.getTime() / 1000);
         
         if (currentTimeDisplay) {
@@ -1701,23 +2262,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentTimestampDisplay) {
             currentTimestampDisplay.textContent = timestamp;
         }
-    }
-
-    // 格式化北京时间
-    function formatBeijingTime(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    }
-
-    // 获取星期
-    function getWeekday(date) {
-        const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-        return weekdays[date.getDay()];
     }
 
     // 初始化时更新一次，然后每秒更新
@@ -1762,13 +2306,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 显示结果
-            document.getElementById('ts-result-beijing').textContent = formatBeijingTime(date);
+            const shanghaiParts = formatShanghaiDateTime(date);
+            document.getElementById('ts-result-beijing').textContent = shanghaiParts.formatted;
             document.getElementById('ts-result-formatted').textContent = date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-            document.getElementById('ts-year').textContent = date.getFullYear();
-            document.getElementById('ts-month').textContent = date.getMonth() + 1 + '月';
-            document.getElementById('ts-day').textContent = date.getDate() + '日';
-            document.getElementById('ts-weekday').textContent = getWeekday(date);
-            document.getElementById('ts-time').textContent = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+            document.getElementById('ts-year').textContent = shanghaiParts.year;
+            document.getElementById('ts-month').textContent = Number(shanghaiParts.month) + '月';
+            document.getElementById('ts-day').textContent = Number(shanghaiParts.day) + '日';
+            document.getElementById('ts-weekday').textContent = shanghaiParts.weekday;
+            document.getElementById('ts-time').textContent = `${shanghaiParts.hour}:${shanghaiParts.minute}:${shanghaiParts.second}`;
             document.getElementById('ts-type').textContent = tsType;
 
             tsPlaceholder.style.display = 'none';
@@ -1788,9 +2333,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // datetime-local 返回的是本地时间
-            const date = new Date(input);
-            if (isNaN(date.getTime())) {
+            let date;
+            try {
+                date = parseShanghaiDateTimeLocal(input);
+            } catch (error) {
                 showToast('无效的时间', 'error');
                 return;
             }
@@ -2045,32 +2591,45 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * 复制到剪贴板 (全局函数)
  */
-function copyToClipboard(text) {
-    // 现代 API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
+async function copyToClipboard(text) {
+    const normalizedText = String(text ?? '');
+
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(normalizedText);
             showToast('已复制到剪贴板', 'success');
-        }).catch(err => {
-            console.error('Failed to copy: ', err);
-            fallbackCopy(text);
-        });
-    } else {
-        fallbackCopy(text);
+            return true;
+        } catch (error) {
+            console.warn('Clipboard API 复制失败，尝试兼容方案:', error);
+        }
     }
+
+    return fallbackCopy(normalizedText);
 }
 
 function fallbackCopy(text) {
     const textarea = document.createElement('textarea');
     textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
     document.body.appendChild(textarea);
     textarea.select();
+
     try {
-        document.execCommand('copy');
+        const copied = document.execCommand('copy');
+        if (!copied) {
+            throw new Error('浏览器拒绝兼容复制命令');
+        }
         showToast('已复制到剪贴板', 'success');
-    } catch (err) {
+        return true;
+    } catch (error) {
+        console.error('兼容复制失败:', error);
         showToast('复制失败', 'error');
+        return false;
+    } finally {
+        document.body.removeChild(textarea);
     }
-    document.body.removeChild(textarea);
 }
 
 /**
@@ -2093,48 +2652,60 @@ function downloadFile(content, fileName) {
  * @param {string} type 'success' | 'error' | 'warning' | 'info'
  */
 function showToast(message, type = 'info') {
+    const supportedTypes = new Set(['success', 'error', 'warning', 'info']);
+    const normalizedType = supportedTypes.has(type) ? type : 'info';
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️',
+        info: 'ℹ️'
+    };
+
     let container = document.querySelector('.toast-container');
     if (!container) {
         container = document.createElement('div');
         container.className = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'false');
         document.body.appendChild(container);
     }
 
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    
-    // 添加图标 (可选)
-    let iconHtml = '';
-    switch(type) {
-        case 'success': iconHtml = '<span style="margin-right:8px">✅</span>'; break;
-        case 'error': iconHtml = '<span style="margin-right:8px">❌</span>'; break;
-        case 'warning': iconHtml = '<span style="margin-right:8px">⚠️</span>'; break;
-        default: iconHtml = '<span style="margin-right:8px">ℹ️</span>';
-    }
-    
-    toast.innerHTML = `${iconHtml}${message}`;
+    toast.className = `toast ${normalizedType}`;
+    toast.setAttribute('role', normalizedType === 'error' ? 'alert' : 'status');
 
+    const icon = document.createElement('span');
+    icon.style.marginRight = '0.5rem';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = icons[normalizedType];
+
+    const messageText = document.createElement('span');
+    messageText.textContent = String(message ?? '');
+
+    toast.append(icon, messageText);
     container.appendChild(toast);
 
-    // 3秒后自动消失
+    const removeToast = () => {
+        if (toast.parentElement) {
+            toast.parentElement.removeChild(toast);
+        }
+        if (container.children.length === 0 && container.parentElement) {
+            container.parentElement.removeChild(container);
+        }
+    };
+
     setTimeout(() => {
         toast.style.animation = 'fadeOut 0.3s ease-out forwards';
-        toast.addEventListener('animationend', () => {
-            if (toast.parentElement) {
-                toast.parentElement.removeChild(toast);
-            }
-            if (container.children.length === 0) {
-                if (container.parentElement) {
-                    container.parentElement.removeChild(container);
-                }
-            }
-        });
+        toast.addEventListener('animationend', removeToast, { once: true });
+
+        // 某些环境不会派发动画结束事件，使用兜底计时保证节点释放。
+        setTimeout(removeToast, 500);
     }, 3000);
 }
 
 // 全局错误捕获
 window.onerror = function(message, source, lineno, colno, error) {
     console.error('Global Error:', message, error);
-    showToast('发生未知错误: ' + message, 'error');
+    showToast('发生未知错误: ' + String(message), 'error');
     return false;
 };

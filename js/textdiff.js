@@ -1,5 +1,8 @@
 // 文本 Diff 对比（依赖 lib/diff.min.js -> 全局 Diff 对象）
 (function() {
+    const MAX_INPUT_BYTES = 1024 * 1024;
+    const textEncoder = new TextEncoder();
+
     function init() {
         const left = document.getElementById('diff-left');
         if (!left) return;
@@ -26,16 +29,23 @@
         }
 
         function run() {
+            const a = left.value, b = right.value;
+
+            // 在调用 Diff 前按 UTF-8 字节数拒绝超限输入。
+            if (textEncoder.encode(a).byteLength > MAX_INPUT_BYTES || textEncoder.encode(b).byteLength > MAX_INPUT_BYTES) {
+                output.innerHTML = '<span style="color:var(--danger-color)">任一侧文本不能超过 1 MiB UTF-8 字节</span>';
+                return;
+            }
             if (typeof Diff === 'undefined') {
                 output.innerHTML = '<span style="color:var(--danger-color)">diff.min.js 未加载</span>';
                 return;
             }
-            const a = left.value, b = right.value;
             const m = mode.value;
             let parts;
-            if (m === 'char') parts = Diff.diffChars(a, b);
-            else if (m === 'word') parts = Diff.diffWords(a, b);
-            else if (m === 'line') parts = Diff.diffLines(a, b);
+            if (m === 'chars') parts = Diff.diffChars(a, b);
+            else if (m === 'words') parts = Diff.diffWords(a, b);
+            else if (m === 'lines') parts = Diff.diffLines(a, b);
+            else if (m === 'sentences') parts = Diff.diffSentences(a, b);
             else if (m === 'json') {
                 try {
                     const aj = JSON.stringify(JSON.parse(a), null, 2);

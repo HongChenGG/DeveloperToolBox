@@ -10,7 +10,7 @@
 | 路径 | 作用 |
 |---|---|
 | `/search?q=关键词` | 默认走 **Bing HTML 抓取**（免 API Key，对云 IP 友好），也可指定 `&engine=ddg` / `&engine=google` / `&engine=bing` |
-| `/fetch?url=https://...` | 抓任意网页，自动转纯文本（HTML 不友好 LLM） |
+| `/fetch?url=https://...` | 抓取通过安全校验的公网文本网页，自动转纯文本 |
 | `/health` | 健康检查 |
 
 > ⚠️ **为何不默认 DuckDuckGo**：DDG 会基于 IP 段判断是否真人，Cloudflare 数据中心 IP 经常被它返回空结果。Bing 的反爬较宽松，抓 HTML 命中率高得多。
@@ -47,6 +47,8 @@
 
 `web_fetch` 会自动复用同一域名替换路径走 `/fetch?url=...`（前端代码会处理）。
 
+首次访问新的目标域名时，前端会要求用户选择“允许一次 / 本会话允许 / 始终允许 / 拒绝”，并在回答下方保留来源和工具执行记录。
+
 ## 部署（wrangler CLI，适合多环境）
 
 ```bash
@@ -72,10 +74,15 @@ wrangler deploy
 ## 安全提醒
 
 - `PROXY_TOKEN` 强烈建议设置——否则全网都能用你的 Google/Bing 配额，免费额度几小时就被薅光
+- 静态网页无法真正保密共享 Token：写进前端默认配置的 Token 应视为公开凭据。个人使用建议部署自己的 Worker 和 Token
 - API Key（Google/Bing）只放 Cloudflare Variables，**永远不要写进前端代码**
 - 想限制 origin 的话，把 `worker.js` 里 `Access-Control-Allow-Origin: '*'` 改成你的域名
+- `/fetch` 拒绝 localhost 和 IP 字面量；域名解析结果按“仅允许全球可路由地址”处理，IPv4/IPv6 任一结果属于私网、环回、链路本地、ULA、站点本地、文档、保留、转换或其他特殊用途前缀时整次请求拒绝
+- 重定向最多 3 次，每一跳都重新执行 DNS 与地址策略校验；重定向正文、被拒绝的类型或长度正文、读取异常正文都会主动取消
+- 搜索和抓取从首个上游步骤开始共用 15 秒 deadline，覆盖 DNS、上游 fetch、重定向和正文读取；超时统一返回 `TIMEOUT` / HTTP 504 JSON
+- 原始正文最多读取 1 MiB，精确 1 MiB 允许；只接受文本、HTML、JSON 和 XML 类型，流式 reader 始终释放锁
+- Worker 结果仍属于不可信外部内容，模型不得把网页文本当作系统或工具指令
 
-## 与 HelloKimi 的关系
+### DNS rebinding 剩余风险
 
-[HelloKimi](https://d/Code/HelloKimi) 是把 kimi-ai.chat 包装成 OpenAI 兼容 API 的 Worker（用 Hono 框架）。
-本项目是它的**轻量姊妹**：不依赖 Hono，只做搜索/抓取反代，单文件 < 200 行，复制粘贴就能跑。
+Cloudflare Workers 原生 `fetch` 目前没有接口把预检得到的 IP 原子绑定到随后建立的上游连接。本实现会在初始 URL 和每个重定向目标上重新解析并校验全部 A/AAAA 结果，但 DNS 校验完成到原生 `fetch` 实际解析、连接之间仍存在 TOCTOU 窗口；攻击者若能在窗口内改变 DNS 答案，仍可能形成 DNS rebinding。代码没有伪装成已消除此风险，也没有改成固定域名白名单。对该风险不可接受的部署应在具备解析结果绑定能力的受控出口代理上执行连接，或额外采用业务允许的域名白名单。
