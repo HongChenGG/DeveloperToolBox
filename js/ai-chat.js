@@ -1994,7 +1994,7 @@
         // 「思考过程显示」改了：清掉历史消息的手动折叠状态，让新设置立刻生效。
         // 否则用户只要手动点过一次折叠，该消息的 thinkOpen 就会永久覆盖设置。
         if (oldThinkOpen !== !!cfg.thinkDefaultOpen) {
-            sessions.forEach(s => (s.messages || []).forEach(m => { delete m.thinkOpen; }));
+            sessions.forEach(s => (Array.isArray(s?.messages) ? s.messages : []).forEach(m => { delete m.thinkOpen; }));
             saveSessions();
             renderMessages();
         }

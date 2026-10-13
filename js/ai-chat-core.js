@@ -593,9 +593,10 @@
         return (Array.isArray(sessions) ? sessions : [])
             .filter(session => {
                 if (!normalizedQuery) return true;
+                const messages = Array.isArray(session?.messages) ? session.messages : [];
                 const searchableText = [
                     session.title,
-                    ...(session.messages || []).flatMap(message => [message.content, message.reasoning])
+                    ...messages.flatMap(message => [message.content, message.reasoning])
                 ].join('\n').toLowerCase();
                 return searchableText.includes(normalizedQuery);
             })
@@ -1051,7 +1052,7 @@
                 }
             }
 
-            (session.messages || []).forEach((message, messageIndex) => {
+            (Array.isArray(session?.messages) ? session.messages : []).forEach((message, messageIndex) => {
                 if (isNonEmptyString(message?.profileId) && !profileIds.has(message.profileId)) {
                     errors.push(`sessions[${sessionIndex}].messages[${messageIndex}].profileId 找不到对应 Profile`);
                 }
@@ -1201,7 +1202,7 @@
             if (session.sourceSessionId && sessionIdMap.has(session.sourceSessionId)) {
                 session.sourceSessionId = sessionIdMap.get(session.sourceSessionId);
             }
-            (session.messages || []).forEach(message => {
+            (Array.isArray(session?.messages) ? session.messages : []).forEach(message => {
                 if (message.profileId && profileIdMap.has(message.profileId)) {
                     message.profileId = profileIdMap.get(message.profileId);
                 }

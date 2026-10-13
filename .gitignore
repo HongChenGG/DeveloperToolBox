@@ -24,3 +24,5 @@ docs/superpowers/specs/
 *~
 *.bak
 *.bak.*
+
+.nvmrc

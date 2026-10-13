@@ -1,0 +1,17 @@
+{
+  "name": "红尘百宝箱 - Developer Toolbox",
+  "short_name": "红尘百宝箱",
+  "description": "一站式离线优先开发者工具集 · 30+ 工具 · 7 套主题 · 零构建运行",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F0F8FF",
+  "theme_color": "#00B4D8",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
+
