@@ -2099,6 +2099,27 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function normalizeImageBase64(raw) {
+        let str = String(raw || '').trim();
+        if (!str) return '';
+        if (str.startsWith('data:image/')) return str;
+        str = str.replace(/[\r\n\s]+/g, '');
+        if (str.startsWith('/9j/')) {
+            return 'data:image/jpeg;base64,' + str;
+        } else if (str.startsWith('iVBORw')) {
+            return 'data:image/png;base64,' + str;
+        } else if (str.startsWith('R0lGOD')) {
+            return 'data:image/gif;base64,' + str;
+        } else if (str.startsWith('UklGR')) {
+            return 'data:image/webp;base64,' + str;
+        } else if (str.startsWith('Qk')) {
+            return 'data:image/bmp;base64,' + str;
+        } else if (str.startsWith('PHN2Zw') || str.startsWith('<svg')) {
+            return str.startsWith('<svg') ? 'data:image/svg+xml;utf8,' + encodeURIComponent(str) : 'data:image/svg+xml;base64,' + str;
+        }
+        return 'data:image/png;base64,' + str;
+    }
+
     if (btnCodecBase64ToImg) {
         btnCodecBase64ToImg.addEventListener('click', () => {
             const base64 = codecImgBase64.value.trim();
@@ -2120,8 +2141,18 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (codecImgPreview) {
+        codecImgPreview.addEventListener('error', () => {
+            codecImgPreview.src = '';
+            codecImgPreview.style.display = 'none';
+            codecImgPlaceholder.style.display = 'block';
+            showToast('图片预览加载失败，Base64 内容可能不合法或已损坏', 'error');
+        });
+    }
+
     function showPreviewImage(src) {
-        codecImgPreview.src = src;
+        const safeUrl = normalizeImageBase64(src);
+        codecImgPreview.src = safeUrl;
         codecImgPreview.style.display = 'block';
         codecImgPlaceholder.style.display = 'none';
     }

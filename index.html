@@ -16,8 +16,8 @@
     <!-- Three.js 3D 背景画布 (内网低配/远程桌面环境可保持注释以保证极致流畅) -->
     <!-- <canvas id="three-bg-canvas"></canvas> -->
 
-    <!-- SVG 图标定义 (隐藏) -->
-    <svg style="display: none;">
+    <!-- SVG 图标定义 (内网高兼容隐藏容器，避免 display:none 导致部分浏览器中 <use> 渲染为空白) -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position: absolute; width: 0; height: 0; overflow: hidden;" aria-hidden="true">
         <defs>
             <symbol id="icon-box" viewBox="0 0 24 24">
                 <path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -193,6 +193,20 @@
             </symbol>
             <symbol id="icon-stop" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
+            </symbol>
+            <symbol id="icon-attach" viewBox="0 0 24 24">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </symbol>
+            <symbol id="icon-edit" viewBox="0 0 24 24">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </symbol>
+            <symbol id="icon-refresh" viewBox="0 0 24 24">
+                <path d="M23 4v6h-6M1 20v-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </symbol>
+            <symbol id="icon-menu" viewBox="0 0 24 24">
+                <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
             </symbol>
         </defs>
     </svg>
@@ -2164,11 +2178,11 @@
                 <!-- AI 对话 -->
                 <div class="tool-page" id="page-aichat">
                     <div class="toolbar">
-                        <button class="btn btn-info ai-session-drawer-toggle" id="ai-session-drawer-toggle" aria-controls="ai-session-panel" aria-expanded="false">☰ 会话</button>
+                        <button class="btn btn-info ai-session-drawer-toggle" id="ai-session-drawer-toggle" aria-controls="ai-session-panel" aria-expanded="false"><svg><use href="#icon-menu" xlink:href="#icon-menu"></use></svg> 会话</button>
                         <button class="btn btn-primary" id="ai-btn-new"><svg><use xlink:href="#icon-plus"></use></svg> 新建会话</button>
                         <button class="btn btn-info" id="ai-btn-settings"><svg><use xlink:href="#icon-settings"></use></svg> 设置</button>
-                        <button class="btn btn-info" id="ai-btn-backup-export">备份</button>
-                        <button class="btn btn-info" id="ai-btn-backup-import">恢复</button>
+                        <button class="btn btn-info" id="ai-btn-backup-export"><svg><use href="#icon-save" xlink:href="#icon-save"></use></svg> 备份</button>
+                        <button class="btn btn-info" id="ai-btn-backup-import"><svg><use href="#icon-import" xlink:href="#icon-import"></use></svg> 恢复</button>
                         <input type="file" id="ai-backup-file" accept="application/json,.json" hidden>
                         <button class="btn btn-success" id="ai-btn-export"><svg><use xlink:href="#icon-export"></use></svg> 导出 HTML</button>
                         <button class="btn btn-info" id="ai-btn-export-md"><svg><use xlink:href="#icon-export"></use></svg> 导出 MD</button>
@@ -2199,8 +2213,8 @@
                                     <textarea id="ai-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴/上传图片..." style="flex:1;min-height:48px;max-height:200px;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary);font-size:14px;resize:vertical;font-family:inherit"></textarea>
                                     <input type="file" id="ai-image-file" accept="image/*" multiple style="display:none">
                                     <input type="file" id="ai-local-file-input" accept=".txt,.md,.json,.js,.jsx,.ts,.tsx,.java,.py,.sql,.ddl,.dml,.sp,.prc,.csv,.tsv,.log,.xml,.yaml,.yml,.properties,.css,.html,.vue" multiple hidden>
-                                    <button id="ai-btn-image" class="btn" title="上传图片（也可直接 Ctrl+V 粘贴截图）" style="height:48px;min-width:48px">🖼️</button>
-                                    <button id="ai-btn-local-files" class="btn" title="添加本轮文本文件" style="height:48px;min-width:48px">📎</button>
+                                    <button id="ai-btn-image" class="btn" title="上传图片（也可直接 Ctrl+V 粘贴截图）" style="height:48px;min-width:48px"><svg><use href="#icon-image" xlink:href="#icon-image"></use></svg></button>
+                                    <button id="ai-btn-local-files" class="btn" title="添加本轮文本文件" style="height:48px;min-width:48px"><svg><use href="#icon-attach" xlink:href="#icon-attach"></use></svg></button>
                                     <button id="ai-btn-send" class="btn btn-primary" style="height:48px;min-width:80px">
                                         <svg><use xlink:href="#icon-send"></use></svg> 发送
                                     </button>

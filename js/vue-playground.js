@@ -116,7 +116,7 @@
                   code: `<div>\n  <el-badge :value="12">\n    <el-button>消息</el-button>\n  </el-badge>\n  <el-badge :value="200" :max="99" type="warning">\n    <el-button>评论</el-button>\n  </el-badge>\n  <el-badge is-dot>\n    <el-button>提醒</el-button>\n  </el-badge>\n</div>`,
                   props: 'value/max/is-dot/hidden/type' },
                 { id: 'avatar', t: 'Avatar 头像', d: '头像展示',
-                  code: `<div>\n  <el-avatar icon="el-icon-user-solid"></el-avatar>\n  <el-avatar src="https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png"></el-avatar>\n  <el-avatar shape="square">user</el-avatar>\n</div>`,
+                  code: `<div>\n  <el-avatar icon="el-icon-user-solid"></el-avatar>\n  <el-avatar src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'><rect width='40' height='40' rx='20' fill='%2300B4D8'/><circle cx='20' cy='15' r='7' fill='white'/><path d='M8 35 c0-7 6-11 12-11 s12 4 12 11' fill='white'/></svg>"></el-avatar>\n  <el-avatar shape="square">user</el-avatar>\n</div>`,
                   props: 'icon/size/shape/src/srcset/alt/fit' },
             ]
         },

@@ -30,19 +30,19 @@
 
     // 系统提示词模板库：用户可以一键切换不同的"人设"
     const SYSTEM_TEMPLATES = [
-        { id: 'default',     icon: '🗄️', name: 'SQL Server 专家',  desc: 'T-SQL 架构、复杂查询、索引与性能调优',
+        { id: 'default',     icon: '<svg><use href="#icon-database" xlink:href="#icon-database"></use></svg>', name: 'SQL Server 专家',  desc: 'T-SQL 架构、复杂查询、索引与性能调优',
           content: DEFAULT_SYSTEM },
-        { id: 'programmer',  icon: '🤖', name: '通用编程助手',      desc: '全栈编程助手，回答简洁准确贴合实战',
+        { id: 'programmer',  icon: '<svg><use href="#icon-code" xlink:href="#icon-code"></use></svg>', name: '通用编程助手',      desc: '全栈编程助手，回答简洁准确贴合实战',
           content: '你是「红尘百宝箱」内置的 AI 编程助手，运行在用户的浏览器里，专注帮助开发者解决编码、调试、架构和工具使用问题。\n\n回答风格：\n- 简洁、准确、贴合实战，能直接抄走的代码优先\n- 代码一律用 Markdown 围栏代码块并标注语言（如 ```js / ```python / ```bash）\n- 不确定的事情明确说"不确定"，不要硬编\n- 默认中文回答，除非用户用英文\n- 复杂问题先给结论，再展开\n\n如果用户问你是谁、用的什么模型，可以照实说明你是基于他在设置里配置的模型（Ollama / 中转站等）运行的对话助手。' },
-        { id: 'sql_multi',   icon: '🐬', name: '多方言 SQL 专家',   desc: 'MySQL/PG/Oracle/SQLite 跨方言对比与迁移',
+        { id: 'sql_multi',   icon: '<svg><use href="#icon-database" xlink:href="#icon-database"></use></svg>', name: '多方言 SQL 专家',   desc: 'MySQL/PG/Oracle/SQLite 跨方言对比与迁移',
           content: '你是 SQL 与数据库设计专家，精通 MySQL / PostgreSQL / Oracle / SQLite / SQL Server 等多数据库方言差异与迁移优化。\n\n回答风格：\n- 先确认目标数据库类型和版本（用户未指定时合理假设并明确标注）\n- 分析跨方言特性差异（如自增键、时间函数、分页语法、递归查询、JSON 支持）\n- 给出 SQL 后说明执行顺序、索引配合及可能的全表扫描与锁风险\n- 性能优化给出原因分析（加索引/重写子查询/分页改 keyset 等）\n- 复杂查询优先使用 CTE / 临时表，全部使用大写关键字与清晰缩进' },
-        { id: 'java_vue',    icon: '☕', name: 'Java + Vue2 全栈',  desc: '后端 Java 8 + Spring Boot 2，前端 Vue2 + ElementUI',
+        { id: 'java_vue',    icon: '<svg><use href="#icon-class" xlink:href="#icon-class"></use></svg>', name: 'Java + Vue2 全栈',  desc: '后端 Java 8 + Spring Boot 2，前端 Vue2 + ElementUI',
           content: '你是一位资深 Java + Vue2 全栈工程师，专精：\n- 后端：Java 8 / Spring Boot 2.x / MyBatis(-Plus) / MySQL / Redis（默认 JDK 8 语法，禁用 Java 9+ 的 var、record、sealed、switch 表达式等新特性）\n- 前端：Vue 2.7 / Element UI 2.15 / Axios / Vuex / Vue Router 3\n\n回答风格：\n- 先讲方案选择和取舍，再给可直接使用的代码\n- Java 严格按 JDK 8 写：用 Optional/Stream 但不用 var；新建集合用 new ArrayList<>() 而非 List.of()；时间 API 用 java.time（JDK 8 已支持），不用第三方\n- Lombok 注解可用；写明文件路径与类名（如 src/main/java/com/example/UserService.java）\n- Vue 用 Options API（除非用户明确要 Composition），<template>/<script>/<style scoped> 三段式\n- 注释一律中文，命名遵循驼峰/帕斯卡惯例\n- 涉及数据库给完整 DDL；涉及接口给请求/响应示例\n- 不堆砌"最佳实践"空话，只给当下能用的方案' },
-        { id: 'doc_writer',  icon: '📝', name: '技术文档撰写',      desc: '产出结构化中文技术文档',
+        { id: 'doc_writer',  icon: '<svg><use href="#icon-md" xlink:href="#icon-md"></use></svg>', name: '技术文档撰写',      desc: '产出结构化中文技术文档',
           content: '你是一位资深技术文档作者，擅长把复杂概念写得清晰可读。\n\n输出风格：\n- 结论先行：第一段直接给"是什么 + 为什么用 + 一句话总结"\n- 章节结构：概述 → 适用场景 → 核心概念 → 操作步骤（带编号） → 代码示例 → 常见问题 → 参考链接\n- 用 Markdown：### 标题、有序列表、表格对比、代码块（标注语言）\n- 避免"很简单"、"显然"、"众所周知"等模糊词\n- 每个概念给一个具体例子，不要纯理论' },
-        { id: 'writer_zh',   icon: '✍️', name: '中文写作助手',      desc: '公文、文案、博客、随笔多文风',
+        { id: 'writer_zh',   icon: '<svg><use href="#icon-case" xlink:href="#icon-case"></use></svg>', name: '中文写作助手',      desc: '公文、文案、博客、随笔多文风',
           content: '你是一位中文写作助手，擅长在公文、新媒体文案、博客随笔、产品介绍等不同文风之间切换。\n\n输出原则：\n- 先确认文体定位（用户没说就询问一次）\n- 结构清晰：开头点题 → 中段展开 → 结尾收束\n- 语言通顺、用词准确，拒绝官话套话和陈词滥调\n- 主动给替换词建议或不同语气版本\n- 写完后可附"修改思路"说明为什么这么改' },
-        { id: 'tutor',       icon: '🧠', name: '解题答疑导师',      desc: '数学、物理、算法题循序解析',
+        { id: 'tutor',       icon: '<svg><use href="#icon-magic" xlink:href="#icon-magic"></use></svg>', name: '解题答疑导师',      desc: '数学、物理、算法题循序解析',
           content: '你是一位耐心的解题导师，擅长数学、物理、算法和逻辑题。\n\n解题流程：\n1. 复述题意（确认理解正确）\n2. 拆解关键信息和未知量\n3. 列出解题思路（多种方法时给出对比）\n4. 分步骤推导，每步标号且说明"为什么这一步"\n5. 给出最终答案\n6. 回顾：易错点、变式题、复杂度分析（算法题）\n\n算法题代码用 Markdown 围栏，标注语言；数学公式用普通文本（不用 LaTeX 命令，浏览器渲染不了）。' }
     ];
 
@@ -744,10 +744,11 @@
     // 页面内图片查看器（data URL 不能直接顶层导航，会被浏览器拦截）
     function openImageViewer(src) {
         if (!src) return;
+        const safeSrc = (typeof SECURITY !== 'undefined' && SECURITY.getSafeImageUrl) ? (SECURITY.getSafeImageUrl(src) || src) : src;
         const mask = document.createElement('div');
         mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
         const img = document.createElement('img');
-        img.src = src;
+        img.src = safeSrc;
         img.style.cssText = 'max-width:100%;max-height:100%;border-radius:8px;box-shadow:0 10px 50px rgba(0,0,0,.6)';
         mask.appendChild(img);
         const onKey = ev => { if (ev.key === 'Escape') close(); };
@@ -1068,12 +1069,12 @@
                     <div class="ai-msg-content">${bodyHtml}</div>
                     <div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
                         <span class="ai-msg-meta-label" style="font-size:11px;opacity:.55;margin-right:2px">${isUser ? '我' : '助手'}</span>
-                        <button class="ai-msg-act ai-msg-copy" data-message-id="${safeMessageId}">📋 复制</button>
+                        <button class="ai-msg-act ai-msg-copy" data-message-id="${safeMessageId}"><svg><use href="#icon-copy" xlink:href="#icon-copy"></use></svg> 复制</button>
                         ${isUser
-                            ? `<button class="ai-msg-act ai-msg-edit" data-message-id="${safeMessageId}" title="编辑后创建新分支，原对话保持不变">✏️ 编辑</button>`
-                            : `<button class="ai-msg-act ai-msg-regen" data-message-id="${safeMessageId}" title="在新分支重新生成，原对话保持不变">🔄 重新生成</button>`}
-                        ${!isUser && m.truncated ? `<button class="ai-msg-act ai-msg-continue" data-message-id="${safeMessageId}">▶️ 继续生成</button>` : ''}
-                        <button class="ai-msg-act ai-msg-del" data-message-id="${safeMessageId}">🗑️ 删除</button>
+                            ? `<button class="ai-msg-act ai-msg-edit" data-message-id="${safeMessageId}" title="编辑后创建新分支，原对话保持不变"><svg><use href="#icon-edit" xlink:href="#icon-edit"></use></svg> 编辑</button>`
+                            : `<button class="ai-msg-act ai-msg-regen" data-message-id="${safeMessageId}" title="在新分支重新生成，原对话保持不变"><svg><use href="#icon-refresh" xlink:href="#icon-refresh"></use></svg> 重新生成</button>`}
+                        ${!isUser && m.truncated ? `<button class="ai-msg-act ai-msg-continue" data-message-id="${safeMessageId}"><svg><use href="#icon-play" xlink:href="#icon-play"></use></svg> 继续生成</button>` : ''}
+                        <button class="ai-msg-act ai-msg-del" data-message-id="${safeMessageId}"><svg><use href="#icon-delete" xlink:href="#icon-delete"></use></svg> 删除</button>
                         ${!isUser ? renderMessageMetadata(m) : ''}
                     </div>
                     ${!isUser ? renderToolSources(m) : ''}
