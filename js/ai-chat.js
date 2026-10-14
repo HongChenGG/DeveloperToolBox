@@ -858,16 +858,33 @@
         });
     }
 
+    function autoCloseFences(markdownText) {
+        const text = String(markdownText ?? '');
+        const fenceMatches = text.match(/(^|\n)\s*```/g);
+        if (fenceMatches && fenceMatches.length % 2 !== 0) {
+            if (/(^|\n)\s*```[^\n]*$/.test(text)) {
+                return text + '\n\n```';
+            }
+            return text + '\n```';
+        }
+        return text;
+    }
+
     function renderMd(text) {
         if (typeof marked === 'undefined') return escapeHtml(text);
         // 保存原始文本：下面会把公式/思考块换成占位符，
         // 一旦渲染抛异常，catch 里必须用原始文本，否则占位符会泄漏到界面
         const original = text;
         try {
-            const parse = t => SECURITY.renderMarkdown(t, {
-                markedApi: marked,
-                streaming: _skipHighlight
-            });
+            // 流式期间自动补全未闭合的代码围栏，让 marked 实时渲染代码块与 Markdown 格式，
+            // 避免流式期间退化为纯文本导致无法复制代码和排版错乱。
+            const parse = t => {
+                const targetText = _skipHighlight ? autoCloseFences(t) : t;
+                return SECURITY.renderMarkdown(targetText, {
+                    markedApi: marked,
+                    streaming: false
+                });
+            };
 
             // 0) 预处理：中文 + ** 边界修复（CommonMark 不认 CJK 为单词边界）
             text = fixCjkMarkdown(text);
@@ -3761,7 +3778,16 @@
                 e.stopPropagation();
                 const s = getCurrent();
                 const message = s && getMessageById(s, copyBtn.dataset.messageId);
-                if (message) copyText(message.content);
+                if (message) {
+                    copyText(message.content);
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = '✓ 已复制';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => {
+                        copyBtn.textContent = originalText;
+                        copyBtn.classList.remove('copied');
+                    }, 1500);
+                }
                 return;
             }
             // 消息删除
