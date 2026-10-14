@@ -13,8 +13,8 @@
     <link rel="stylesheet" href="lib/katex/katex.min.css">
 </head>
 <body>
-    <!-- Three.js 3D 背景画布 -->
-    <canvas id="three-bg-canvas"></canvas>
+    <!-- Three.js 3D 背景画布 (内网低配/远程桌面环境可保持注释以保证极致流畅) -->
+    <!-- <canvas id="three-bg-canvas"></canvas> -->
 
     <!-- SVG 图标定义 (隐藏) -->
     <svg style="display: none;">
@@ -2635,7 +2635,8 @@
     </div>
 
     <!-- 引入 JS 库 -->
-    <script src="lib/three.min.js"></script>
+    <!-- 3D 动画库 (内网环境若卡顿已注释，如需开启取消注释即可) -->
+    <!-- <script src="lib/three.min.js"></script> -->
     <script src="lib/qrcode.min.js"></script>
     <script src="lib/JsBarcode.all.min.js"></script>
     <script src="lib/jsQR.js"></script>
@@ -2648,8 +2649,8 @@
     <script src="lib/highlight.min.js"></script>
     <!-- 统一安全渲染边界 -->
     <script src="js/security.js"></script>
-    <!-- 3D 背景动画 -->
-    <script src="js/three-bg.js"></script>
+    <!-- 3D 背景动画 (已注释，释放内网 CPU/GPU) -->
+    <!-- <script src="js/three-bg.js"></script> -->
     <!-- 应用逻辑 -->
     <script src="js/app.js"></script>
     <script src="js/notes.js"></script>
