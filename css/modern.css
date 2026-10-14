@@ -2226,3 +2226,41 @@ textarea.ai-input { resize: vertical; min-height: 60px; line-height: 1.5; }
     font-size: 10.5px;
     margin-left: 6px;
 }
+
+/* ==================== 内网无显卡/低配环境极速性能优化 ==================== */
+/* 1. 彻底禁用 CPU 极其沉重的高斯模糊滤镜（毛玻璃） */
+*, *::before, *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 2. 停用后台 60fps 持续占用 CPU 重绘的死循环动画 */
+.logo-area::after {
+    animation: none !important;
+    display: none !important;
+}
+#btn-toggle-player {
+    animation: none !important;
+}
+
+/* 3. 使用纯净实色背景替换半透明图层，避免 CPU 逐像素 Alpha 混合 */
+:root {
+    --glass: #ffffff;
+    --glass-strong: #ffffff;
+    --glass-border: #e2e8f0;
+    --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+    --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.10);
+}
+
+body:is([data-theme="dark"], [data-theme="midnight"]) {
+    --glass: #1e293b;
+    --glass-strong: #0f172a;
+    --glass-border: #334155;
+}
+
+/* 4. 消除面板悬浮 3D 位移引起的频繁重排重绘 */
+.editor-panel:hover,
+.sub-card:hover {
+    transform: none !important;
+}
+
