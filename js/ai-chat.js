@@ -19,20 +19,23 @@
 
     // 预设模板
     const PRESETS = {
-        ollama:   { baseUrl: 'http://localhost:11434/v1', apiKey: '',           model: 'qwen2.5:7b' },
+        ollama:   { baseUrl: 'http://localhost:11434/v1', apiKey: '',           model: 'qwen3.8:27b' },
         deepseek: { baseUrl: 'https://api.deepseek.com/v1', apiKey: '',         model: 'deepseek-chat' },
         oneapi:   { baseUrl: 'https://your-oneapi.com/v1',  apiKey: '',         model: 'gpt-4o-mini' },
         custom:   { baseUrl: '', apiKey: '', model: '' }
     };
 
-    // 默认系统提示词：告诉模型"我是谁、在哪个环境、回答风格"
-    // 避免用户没填 system 时，模型回答"我是 ChatGPT/Qwen/..."的尴尬
-    const DEFAULT_SYSTEM = '你是「红尘百宝箱」内置的 AI 编程助手，运行在用户的浏览器里，专注帮助开发者解决编码、调试、架构和工具使用问题。\n\n回答风格：\n- 简洁、准确、贴合实战，能直接抄走的代码优先\n- 代码一律用 Markdown 围栏代码块并标注语言（如 ```js / ```python / ```bash）\n- 不确定的事情明确说"不确定"，不要硬编\n- 默认中文回答，除非用户用英文\n- 复杂问题先给结论，再展开\n\n如果用户问你是谁、用的什么模型，可以照实说明你是基于他在设置里配置的模型（Ollama / 中转站等）运行的对话助手。';
+    // 默认系统提示词：Microsoft SQL Server (T-SQL) 资深架构师与性能调优专家
+    const DEFAULT_SYSTEM = '你是「红尘百宝箱」内置的 Microsoft SQL Server (T-SQL) 资深数据库架构师与性能调优专家，专注为开发者提供生产级、高可靠、高性能的数据库设计、复杂查询编写与故障诊断方案。\n\n【专业领域】\n1. T-SQL 高级开发：\n   - 规范编写 DDL/DML、视图、存储过程、触发器、内联表值函数 (ITVF) 与多语句表值函数 (MSTVF，警惕其性能陷阱)\n   - 熟练运用 CTE（公共表表达式）、窗口函数（OVER、ROW_NUMBER、DENSE_RANK、LAG/LEAD）、OUTPUT 子句、MERGE（注意高并发死锁与替代方案）、CROSS APPLY / OUTER APPLY、OFFSET-FETCH 分页\n2. 执行计划与索引性能优化：\n   - 深度解读图形执行计划与 XML 执行计划，精准识别 Index Scan、Key Lookup / RID Lookup、Sort 溢出、Hash Join 倾斜及隐式数据类型转换（CONVERT_IMPLICIT 导致索引失效）\n   - 精准设计聚集索引 (Clustered Index)、非聚集索引覆盖方案（INCLUDE 列）、过滤索引 (Filtered Index)、计算列持久化索引与列存索引 (Columnstore Index)\n   - 统计信息 (Statistics) 机制、参数嗅探 (Parameter Sniffing) 应对（OPTIMIZE FOR、RECOMPILE、局部变量）\n3. 高并发、事务与锁优化：\n   - 严谨把控事务隔离级别（READ COMMITTED / 读提交快照隔离 RCSI / SNAPSHOT / SERIALIZABLE）\n   - 死锁 (Deadlock) 与阻塞分析排查，事务设计必须短小精悍，严格遵循一致的资源访问顺序\n   - 编写健壮的防御性 T-SQL：SET XACT_ABORT ON 与标准 TRY...CATCH 错误处理、事务回滚与日志记录\n4. 架构、存储与 TempDB：\n   - 临时表 (#TempTable，具备统计信息) 与表变量 (@TableVariable) 的科学选型\n   - 分区表/分区索引设计、批量数据加载（BULK INSERT / bcp）、DBCC 维护命令\n\n【输出规范】\n- 语法严谨：T-SQL 关键字一律大写（SELECT, FROM, WHERE, JOIN, WITH, EXEC 等），对象名推荐采用架构限定（如 dbo.TableName），代码排版缩进工整。\n- 可直接执行：提供的 SQL 脚本一律包裹在 Markdown 围栏代码块（```sql）中，附带必要的批处理分隔符 GO 与容错检查（如 IF OBJECT_ID(...) IS NOT NULL）。\n- 防御性与安全：坚决杜绝 SQL 注入，动态 SQL 统一强制使用 sp_executesql 带参数化执行；写出 UPDATE/DELETE 前提供事务保障与校验逻辑。\n- 深度解析：给出 SQL 后，简要指出：预计使用的索引、SARGable 条件考量、执行计划关键点及边界场景提示（如 NULL 值、浮点精度、高并发锁争用）。\n- 版本自适应：默认兼容 SQL Server 2016 ~ 2022+ 及 Azure SQL，若涉及特定版本特性（如 STRING_AGG, APPROX_COUNT_DISTINCT, GREATEST/LEAST 等）予以明确标注。';
 
     // 系统提示词模板库：用户可以一键切换不同的"人设"
     const SYSTEM_TEMPLATES = [
-        { id: 'default',     icon: '🤖', name: '通用助手',          desc: '默认编程助手，回答简洁实战',
+        { id: 'default',     icon: '🗄️', name: 'SQL Server 专家',  desc: 'T-SQL 架构、复杂查询、索引与性能调优',
           content: DEFAULT_SYSTEM },
+        { id: 'programmer',  icon: '🤖', name: '通用编程助手',      desc: '全栈编程助手，回答简洁准确贴合实战',
+          content: '你是「红尘百宝箱」内置的 AI 编程助手，运行在用户的浏览器里，专注帮助开发者解决编码、调试、架构和工具使用问题。\n\n回答风格：\n- 简洁、准确、贴合实战，能直接抄走的代码优先\n- 代码一律用 Markdown 围栏代码块并标注语言（如 ```js / ```python / ```bash）\n- 不确定的事情明确说"不确定"，不要硬编\n- 默认中文回答，除非用户用英文\n- 复杂问题先给结论，再展开\n\n如果用户问你是谁、用的什么模型，可以照实说明你是基于他在设置里配置的模型（Ollama / 中转站等）运行的对话助手。' },
+        { id: 'sql_multi',   icon: '🐬', name: '多方言 SQL 专家',   desc: 'MySQL/PG/Oracle/SQLite 跨方言对比与迁移',
+          content: '你是 SQL 与数据库设计专家，精通 MySQL / PostgreSQL / Oracle / SQLite / SQL Server 等多数据库方言差异与迁移优化。\n\n回答风格：\n- 先确认目标数据库类型和版本（用户未指定时合理假设并明确标注）\n- 分析跨方言特性差异（如自增键、时间函数、分页语法、递归查询、JSON 支持）\n- 给出 SQL 后说明执行顺序、索引配合及可能的全表扫描与锁风险\n- 性能优化给出原因分析（加索引/重写子查询/分页改 keyset 等）\n- 复杂查询优先使用 CTE / 临时表，全部使用大写关键字与清晰缩进' },
         { id: 'java_vue',    icon: '☕', name: 'Java + Vue2 全栈',  desc: '后端 Java 8 + Spring Boot 2，前端 Vue2 + ElementUI',
           content: '你是一位资深 Java + Vue2 全栈工程师，专精：\n- 后端：Java 8 / Spring Boot 2.x / MyBatis(-Plus) / MySQL / Redis（默认 JDK 8 语法，禁用 Java 9+ 的 var、record、sealed、switch 表达式等新特性）\n- 前端：Vue 2.7 / Element UI 2.15 / Axios / Vuex / Vue Router 3\n\n回答风格：\n- 先讲方案选择和取舍，再给可直接使用的代码\n- Java 严格按 JDK 8 写：用 Optional/Stream 但不用 var；新建集合用 new ArrayList<>() 而非 List.of()；时间 API 用 java.time（JDK 8 已支持），不用第三方\n- Lombok 注解可用；写明文件路径与类名（如 src/main/java/com/example/UserService.java）\n- Vue 用 Options API（除非用户明确要 Composition），<template>/<script>/<style scoped> 三段式\n- 注释一律中文，命名遵循驼峰/帕斯卡惯例\n- 涉及数据库给完整 DDL；涉及接口给请求/响应示例\n- 不堆砌"最佳实践"空话，只给当下能用的方案' },
         { id: 'doc_writer',  icon: '📝', name: '技术文档撰写',      desc: '产出结构化中文技术文档',
@@ -40,24 +43,22 @@
         { id: 'writer_zh',   icon: '✍️', name: '中文写作助手',      desc: '公文、文案、博客、随笔多文风',
           content: '你是一位中文写作助手，擅长在公文、新媒体文案、博客随笔、产品介绍等不同文风之间切换。\n\n输出原则：\n- 先确认文体定位（用户没说就询问一次）\n- 结构清晰：开头点题 → 中段展开 → 结尾收束\n- 语言通顺、用词准确，拒绝官话套话和陈词滥调\n- 主动给替换词建议或不同语气版本\n- 写完后可附"修改思路"说明为什么这么改' },
         { id: 'tutor',       icon: '🧠', name: '解题答疑导师',      desc: '数学、物理、算法题循序解析',
-          content: '你是一位耐心的解题导师，擅长数学、物理、算法和逻辑题。\n\n解题流程：\n1. 复述题意（确认理解正确）\n2. 拆解关键信息和未知量\n3. 列出解题思路（多种方法时给出对比）\n4. 分步骤推导，每步标号且说明"为什么这一步"\n5. 给出最终答案\n6. 回顾：易错点、变式题、复杂度分析（算法题）\n\n算法题代码用 Markdown 围栏，标注语言；数学公式用普通文本（不用 LaTeX 命令，浏览器渲染不了）。' },
-        { id: 'sql_pro',     icon: '🗄️', name: 'SQL 数据库专家',    desc: 'MySQL/PG/Oracle 多方言 + 性能优化',
-          content: '你是 SQL 与数据库设计专家，精通 MySQL / PostgreSQL / Oracle / SQL Server 方言差异。\n\n回答风格：\n- 先确认数据库类型和版本（用户没说就问一次或合理假设并标注）\n- 必要时让用户提供 SHOW CREATE TABLE 或 DDL\n- 给 SQL 后说明：执行顺序、用到的索引、可能的全表扫描和锁\n- 性能问题给优化方案（加索引/重写子查询/分页改 keyset 等）和原因\n- 复杂查询拆 CTE / 临时表，方便阅读\n- 拒绝写一句话长 SQL 不带格式，全部用大写关键字 + 缩进对齐' }
+          content: '你是一位耐心的解题导师，擅长数学、物理、算法和逻辑题。\n\n解题流程：\n1. 复述题意（确认理解正确）\n2. 拆解关键信息和未知量\n3. 列出解题思路（多种方法时给出对比）\n4. 分步骤推导，每步标号且说明"为什么这一步"\n5. 给出最终答案\n6. 回顾：易错点、变式题、复杂度分析（算法题）\n\n算法题代码用 Markdown 围栏，标注语言；数学公式用普通文本（不用 LaTeX 命令，浏览器渲染不了）。' }
     ];
 
     // 内置默认搜索代理（用户留空时静默走这个，不在 UI 暴露）
     const DEFAULT_SEARCH_PROXY = 'https://toolbox-search-proxy.744882174.workers.dev/search?q={q}&token=mtb_kx9P3aQ7vL2nR8sZ';
 
-    // 默认模型配置（一个 profile = 一组 baseUrl/apiKey/model/参数）
+    // 默认模型配置（内置推荐模型：本地 Ollama qwen3.8:27b + SQL Server 专业参数）
     function makeDefaultProfile(id, name) {
         return {
             id: id || ('p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
-            name: name || '默认',
-            baseUrl: '',
+            name: name || 'Qwen3.8 27B (SQL Server)',
+            baseUrl: 'http://localhost:11434/v1',
             apiKey: '',
-            model: '',
-            temperature: 0.7,
-            topP: 1,
+            model: 'qwen3.8:27b',
+            temperature: 0.2,
+            topP: 0.9,
             maxTokens: 32768,
             contextLen: 50,
             frequencyPenalty: 0,
@@ -65,12 +66,12 @@
             stream: true,
             // 思考深度控制（OpenAI 兼容的 reasoning_effort）
             // 留空 = 不发送该字段；Qwen3.8 默认 xhigh 会过度思考，建议 medium/low
-            reasoningEffort: '',
+            reasoningEffort: 'medium',
             reasoningEffortEnabled: false,
-            supportsReasoning: false,
-            supportsVision: true,
-            supportsTools: false,
-            maxOutputTokens: 32768,
+            supportsReasoning: true,
+            supportsVision: false,
+            supportsTools: true,
+            maxOutputTokens: 4096,
             tokenParameterMode: 'max_tokens',
             // 联网搜索（基于 OpenAI function calling，要求模型支持 tools）
             webEnabled: false,
@@ -81,7 +82,7 @@
     // 默认配置：模型列表 + 全局项（system / 压缩 / 技能）
     const DEFAULT_CFG = {
         schemaVersion: AI_CORE.AI_SCHEMA_VERSION,
-        profiles: [makeDefaultProfile('p_default', '默认')],
+        profiles: [makeDefaultProfile('p_default', 'Qwen3.8 27B (SQL Server)')],
         currentProfileId: 'p_default',
         system: DEFAULT_SYSTEM,
         systemTemplate: 'default',  // 当前选中的模板 id
@@ -148,6 +149,18 @@
             if (!migration.valid) throw new Error(migration.errors.join('；') || '配置结构损坏');
             const migratedConfig = migration.value;
             if (!Object.prototype.hasOwnProperty.call(parsed, 'system')) migratedConfig.system = DEFAULT_SYSTEM;
+            const defaultProf = migratedConfig.profiles?.find(p => p.id === 'p_default');
+            if (defaultProf && (!defaultProf.model || defaultProf.model === 'qwen2.5:7b')) {
+                defaultProf.model = 'qwen3.8:27b';
+                defaultProf.baseUrl = defaultProf.baseUrl || 'http://localhost:11434/v1';
+                if (defaultProf.name === '默认') defaultProf.name = 'Qwen3.8 27B (SQL Server)';
+                defaultProf.supportsReasoning = true;
+                defaultProf.supportsVision = false;
+                defaultProf.supportsTools = true;
+                defaultProf.temperature = 0.2;
+                defaultProf.topP = 0.9;
+                migration.changed = true;
+            }
             if (migration.changed) {
                 localStorage.setItem(LS_CFG, JSON.stringify(AI_CORE.createPersistentConfig(migratedConfig)));
             }
@@ -381,12 +394,15 @@
                 model: p.model,
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.3,
-                max_tokens: 64,
+                max_tokens: 300,
                 stream: false
             };
             const { response: resp } = await fetchWithCompatibilityFallback(url, headers, titleBody, controller.signal);
             const data = await resp.json();
-            let title = (data?.choices?.[0]?.message?.content || '').trim();
+            let rawContent = (data?.choices?.[0]?.message?.content || '').trim();
+            // 剥离思考模型输出的 <think>...</think> 标签，获取实际标题
+            rawContent = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            let title = rawContent;
             // 清理：去引号/书名号/换行/markdown 标记，限长
             title = title
                 .replace(/^[\s"'“”‘’「」『』【】《》*#]+/, '')
@@ -494,6 +510,7 @@
                 if (controllers?.size === 0) sessionControllers.delete(s.id);
             }
         } catch (e) {
+            if (e.name === 'AbortError') return;
             // B: 失败给用户提示，避免下次因上下文超限再次报错时一头雾水
             console.warn('[ai-chat] 压缩失败:', e.message);
             if (typeof showToast === 'function') showToast('历史压缩失败：' + e.message, 'warning');
@@ -528,6 +545,13 @@
 
     // ---------------- DOM 引用 ----------------
     let $msgs, $sessList, $input, $btnSend, $btnStop, $modelTip, $connStatus, $tokTip;
+
+    function autoResizeInput() {
+        if (!$input) return;
+        $input.style.height = 'auto';
+        const nextHeight = Math.min(Math.max(48, $input.scrollHeight), 200);
+        $input.style.height = nextHeight + 'px';
+    }
 
     // ---------------- 渲染 ----------------
     // ---------------- 图片（多模态）支持 ----------------
@@ -695,16 +719,21 @@
     }
 
     // 只给最近 MAX_IMG_MSGS 条带图消息保留图片，更早的图片剥离成纯文本。
-    // 原因：历史图片每次请求都会重新编码成 vision token（每张 ~1k+），
-    //       多轮带图对话会瞬间吃光上下文并拖慢推理。
-    function withImageBudget(list) {
-        let budget = MAX_IMG_MSGS;
+    // 若当前 Profile 未开启图片输入（supportsVision === false），则彻底省略所有图片 payload，避免纯文本模型报 400。
+    function withImageBudget(list, targetProfile = getProfile()) {
+        const visionAllowed = targetProfile?.supportsVision !== false;
+        let budget = visionAllowed ? MAX_IMG_MSGS : 0;
         const out = new Array(list.length);
         for (let i = list.length - 1; i >= 0; i--) {
             const m = list[i];
             if (m.images && m.images.length) {
-                if (budget > 0) { budget--; out[i] = toApiMessage(m); }
-                else out[i] = { role: m.role, content: (m.content || '') + '（此消息附带的图片已省略）' };
+                if (visionAllowed && budget > 0) {
+                    budget--;
+                    out[i] = toApiMessage(m);
+                } else {
+                    const notice = visionAllowed ? '（此消息附带的图片已省略）' : '（此消息附带了图片，当前纯文本模型已自动忽略）';
+                    out[i] = { role: m.role, content: (m.content || '') + notice };
+                }
             } else {
                 out[i] = toApiMessage(m);
             }
@@ -916,8 +945,10 @@
                 highlighted = code;  // 用 marked 已 escape 的原版,安全
             } else {
                 try {
-                    if (langMatch && hljs.getLanguage(language)) {
-                        highlighted = hljs.highlight(rawCode, { language, ignoreIllegals: true }).value;
+                    const lowerLang = language.toLowerCase();
+                    const langKey = (lowerLang === 'tsql' || lowerLang === 'mssql' || lowerLang === 'sqlserver') ? 'sql' : language;
+                    if (langMatch && hljs.getLanguage(langKey)) {
+                        highlighted = hljs.highlight(rawCode, { language: langKey, ignoreIllegals: true }).value;
                     } else {
                         highlighted = hljs.highlightAuto(rawCode).value;
                     }
@@ -1354,7 +1385,7 @@
 
             // 没有 tool_call → 最终回答
             assistantMsg.content = m.content || '';
-            assistantMsg.reasoning = m.reasoning || m.reasoning_content || '';
+            assistantMsg.reasoning = m.reasoning || m.reasoning_content || m.thought || '';
             assistantMsg.usage = data.usage || undefined;
             assistantMsg.finishReason = choice?.finish_reason || '';
             assistantMsg.truncated = assistantMsg.finishReason === 'length';
@@ -1451,6 +1482,7 @@
         }
 
         $input.value = sourceMessage.content || '';
+        autoResizeInput();
         pendingImages = (sourceMessage.images || []).slice();
         renderPendingImages();
         editingContext = {
@@ -1524,12 +1556,17 @@
 
         let history;
         if (session.compressed?.summary) {
-            requestMessages.push({
-                role: 'system',
-                content: '【以下是之前对话的上下文摘要，请在回答时参考】\n' + session.compressed.summary
-            });
             const boundaryIndex = AI_CORE.findMessageIndexById(session, session.compressed.boundaryMessageId);
-            history = session.messages.slice(Math.max(0, boundaryIndex + 1));
+            if (boundaryIndex >= 0) {
+                requestMessages.push({
+                    role: 'system',
+                    content: '【以下是之前对话的上下文摘要，请在回答时参考】\n' + session.compressed.summary
+                });
+                history = session.messages.slice(boundaryIndex + 1);
+            } else {
+                // 压缩边界消息已不存在（可能被用户删除或编辑），安全回退为按上下文长度截断，不注入失效摘要
+                history = session.messages.slice(-Math.max(1, profile.contextLen));
+            }
         } else {
             history = session.messages.slice(-Math.max(1, profile.contextLen));
         }
@@ -1538,7 +1575,7 @@
         const requestHistory = history.map(message => message.id === currentUserMessage.id && fileContext
             ? { ...message, content: (message.content || '') + fileContext }
             : message);
-        requestMessages.push(...withImageBudget(requestHistory));
+        requestMessages.push(...withImageBudget(requestHistory, profile));
         return requestMessages;
     }
 
@@ -1732,7 +1769,7 @@
                 const msg = choice.message || {};
                 assistantMsg.loading = false;
                 assistantMsg.content = msg.content || '';
-                assistantMsg.reasoning = msg.reasoning || msg.reasoning_content || '';
+                assistantMsg.reasoning = msg.reasoning || msg.reasoning_content || msg.thought || '';
                 assistantMsg.usage = data.usage || undefined;
                 assistantMsg.finishReason = choice.finish_reason || '';
                 if (choice.finish_reason === 'length') {
@@ -1896,7 +1933,7 @@
             showToast('API Key 含中文/全角字符，请检查输入框是否混入了非法字符', 'error');
             return;
         }
-        const url = baseUrl.replace(/\/$/, '') + '/models';
+        let url = baseUrl.replace(/\/$/, '') + '/models';
         const headers = {};
         if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
 
@@ -1907,7 +1944,23 @@
         $btn.disabled = true;
 
         try {
-            const resp = await fetch(url, { headers });
+            let resp = await fetch(url, { headers });
+            // 兼容性兜底：若返回 404 且 baseUrl 没带 /v1（例如直接填了 http://localhost:11434）
+            if (!resp.ok && resp.status === 404 && !baseUrl.endsWith('/v1')) {
+                const altUrl = baseUrl.replace(/\/$/, '') + '/v1/models';
+                const altResp = await fetch(altUrl, { headers }).catch(() => null);
+                if (altResp && altResp.ok) {
+                    resp = altResp;
+                    document.getElementById('ai-cfg-baseurl').value = baseUrl.replace(/\/$/, '') + '/v1';
+                } else {
+                    const tagsUrl = baseUrl.replace(/\/$/, '') + '/api/tags';
+                    const tagsResp = await fetch(tagsUrl, { headers }).catch(() => null);
+                    if (tagsResp && tagsResp.ok) {
+                        resp = tagsResp;
+                        document.getElementById('ai-cfg-baseurl').value = baseUrl.replace(/\/$/, '') + '/v1';
+                    }
+                }
+            }
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json();
             const list = data?.data || data?.models || [];
@@ -2486,6 +2539,20 @@
         document.getElementById('ai-cfg-baseurl').value = p.baseUrl;
         document.getElementById('ai-cfg-apikey').value  = p.apiKey;
         document.getElementById('ai-cfg-model').value   = p.model;
+        if (name === 'ollama') {
+            const supportsReasoning = document.getElementById('ai-cfg-supports-reasoning');
+            const supportsVision = document.getElementById('ai-cfg-supports-vision');
+            const supportsTools = document.getElementById('ai-cfg-supports-tools');
+            const temp = document.getElementById('ai-cfg-temperature');
+            const tempVal = document.getElementById('ai-cfg-temp-val');
+            const topP = document.getElementById('ai-cfg-top-p');
+            const topPVal = document.getElementById('ai-cfg-topp-val');
+            if (supportsReasoning) supportsReasoning.checked = true;
+            if (supportsVision) supportsVision.checked = false; // 27b 纯文本模型
+            if (supportsTools) supportsTools.checked = true;
+            if (temp) { temp.value = '0.2'; if (tempVal) tempVal.textContent = '0.2'; }
+            if (topP) { topP.value = '0.9'; if (topPVal) topPVal.textContent = '0.9'; }
+        }
     }
 
     // ---------------- 系统提示词模板 ----------------
@@ -3186,7 +3253,7 @@
         const temporaryPrompt = `请从上一条回复的中断位置继续，不要重复已经输出的内容。上一条回复末尾如下：\n\n${(message.content || '').slice(-2000)}`;
         const requestMessages = [];
         if (cfg.system?.trim()) requestMessages.push({ role: 'system', content: cfg.system.trim() });
-        requestMessages.push(...withImageBudget(history));
+        requestMessages.push(...withImageBudget(history, profile));
         requestMessages.push({ role: 'user', content: temporaryPrompt });
 
         const requestBody = {
@@ -3317,6 +3384,10 @@
             const s = getCurrent();
             if (!s) return;
             if (!confirm('清空当前对话的所有消息？此操作会同时清掉压缩摘要')) return;
+            abortSessionWork(s.id);
+            editingContext = null;
+            _editingMsgIdx = null;
+            renderEditHint();
             s.messages = [];
             delete s.compressed;
             s.updatedAt = Date.now();
@@ -3335,6 +3406,7 @@
                 return;
             }
             $input.value = '';
+            autoResizeInput();
             const imgs = pendingImages.map(pendingImage => typeof pendingImage === 'string' ? pendingImage : pendingImage.dataUrl);
             pendingImages = [];
             pendingImagePixels = 0;
@@ -3369,7 +3441,7 @@
         localFileButton.addEventListener('click', () => localFileInput.click());
         localFileInput.addEventListener('change', async () => {
             const selectedFiles = Array.from(localFileInput.files || []);
-            const allowedExtensionPattern = /\.(txt|md|json|js|jsx|ts|tsx|java|py|sql|xml|yaml|yml|properties|css|html|vue)$/i;
+            const allowedExtensionPattern = /\.(txt|md|json|js|jsx|ts|tsx|java|py|sql|ddl|dml|sp|prc|csv|tsv|log|xml|yaml|yml|properties|css|html|vue)$/i;
             try {
                 if (pendingLocalFiles.length + selectedFiles.length > 8) throw new Error('本轮最多添加 8 个文件');
                 const additions = [];
@@ -3409,6 +3481,8 @@
                 if (e.target.closest('#ai-edit-cancel')) {
                     editingContext = null;
                     _editingMsgIdx = null;
+                    $input.value = '';
+                    autoResizeInput();
                     renderEditHint();
                     showToast('已取消编辑', 'info');
                 }
@@ -3427,10 +3501,15 @@
                 const end   = $input.selectionEnd   ?? $input.value.length;
                 $input.value = $input.value.slice(0, start) + pastedText + $input.value.slice(end);
                 $input.selectionStart = $input.selectionEnd = start + pastedText.length;
+                autoResizeInput();
             }
             for (const it of imgItems) {
                 const f = it.getAsFile();
                 if (!f) continue;
+                if (!getProfile().supportsVision) {
+                    showToast('当前模型未开启图片输入，无法添加图片', 'warning');
+                    break;
+                }
                 try { addPendingImage(await compressImage(f)); }
                 catch (err) { showToast('粘贴图片失败：' + err.message, 'error'); }
             }
@@ -3439,7 +3518,8 @@
             // IME 候选状态时回车应该是"确认上屏",不能触发发送
             // - e.isComposing: 标准 IME 标志(Mac 中文/日文/韩文输入法都会设)
             // - e.keyCode === 229: 部分老 Safari/Firefox 在候选期 isComposing 为 false 时的兜底判断
-            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+            const isSendKey = (e.key === 'Enter' && !e.shiftKey) || ((e.ctrlKey || e.metaKey) && e.key === 'Enter');
+            if (isSendKey && !e.isComposing && e.keyCode !== 229) {
                 e.preventDefault();
                 if (isStreaming) {
                     showToast('上一条还在生成中，请等待或点 ⏹ 停止', 'warning');
@@ -3448,7 +3528,10 @@
                 $btnSend.click();
             }
         });
-        $input.addEventListener('input', updateContextBudget);
+        $input.addEventListener('input', () => {
+            autoResizeInput();
+            updateContextBudget();
+        });
 
         const sessionSearch = document.getElementById('ai-session-search');
         let sessionSearchTimer = null;
@@ -3476,6 +3559,10 @@
             }
             if (document.getElementById('ai-backup-dialog').style.display === 'flex') {
                 closeBackupDialog();
+                return;
+            }
+            if (document.getElementById('ai-settings-modal').style.display === 'flex') {
+                closeSettings();
                 return;
             }
             if (document.getElementById('ai-session-panel').classList.contains('open')) {

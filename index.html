@@ -2198,7 +2198,7 @@
                                 <div style="display:flex;gap:8px;align-items:flex-end">
                                     <textarea id="ai-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行；支持粘贴/上传图片..." style="flex:1;min-height:48px;max-height:200px;padding:10px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary);font-size:14px;resize:vertical;font-family:inherit"></textarea>
                                     <input type="file" id="ai-image-file" accept="image/*" multiple style="display:none">
-                                    <input type="file" id="ai-local-file-input" accept=".txt,.md,.json,.js,.jsx,.ts,.tsx,.java,.py,.sql,.xml,.yaml,.yml,.properties,.css,.html,.vue" multiple hidden>
+                                    <input type="file" id="ai-local-file-input" accept=".txt,.md,.json,.js,.jsx,.ts,.tsx,.java,.py,.sql,.ddl,.dml,.sp,.prc,.csv,.tsv,.log,.xml,.yaml,.yml,.properties,.css,.html,.vue" multiple hidden>
                                     <button id="ai-btn-image" class="btn" title="上传图片（也可直接 Ctrl+V 粘贴截图）" style="height:48px;min-width:48px">🖼️</button>
                                     <button id="ai-btn-local-files" class="btn" title="添加本轮文本文件" style="height:48px;min-width:48px">📎</button>
                                     <button id="ai-btn-send" class="btn btn-primary" style="height:48px;min-width:80px">
@@ -2271,7 +2271,7 @@
                 <div style="margin-bottom:14px">
                     <label class="ai-label">模型 ID</label>
                     <div style="display:flex;gap:8px">
-                        <input type="text" id="ai-cfg-model" class="ai-input" style="flex:1" placeholder="如 deepseek-chat / qwen2.5:7b">
+                        <input type="text" id="ai-cfg-model" class="ai-input" style="flex:1" placeholder="如 qwen3.8:27b / deepseek-chat">
                         <button id="ai-btn-fetch-models" class="btn btn-info" style="white-space:nowrap">拉取模型</button>
                     </div>
                     <select id="ai-cfg-model-select" style="display:none;width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-darker);color:var(--text-primary)"></select>

@@ -644,12 +644,14 @@
     function getRequestFallback(status, responseText, sentBody) {
         if (![400, 422].includes(Number(status))) return null;
         const normalizedError = String(responseText || '').toLowerCase();
-        const unsupportedPattern = /(unknown|unsupported|unrecognized|not allowed|not permitted|unexpected).{0,80}(parameter|field)|(?:parameter|field).{0,80}(unknown|unsupported|unrecognized|not allowed|not permitted|unexpected)/;
+        const unsupportedPattern = /(unknown|unsupported|unrecognized|not allowed|not permitted|unexpected|invalid|extra).{0,80}(parameter|field|property|argument)|(?:parameter|field|property|argument).{0,80}(unknown|unsupported|unrecognized|not allowed|not permitted|unexpected|invalid|extra)/;
         if (!unsupportedPattern.test(normalizedError)) return null;
 
         const fallbackFields = ['reasoning_effort', 'max_completion_tokens', 'max_tokens'];
         for (const fieldName of fallbackFields) {
-            if (sentBody?.[fieldName] !== undefined && normalizedError.includes(fieldName)) {
+            const hyphenName = fieldName.replace(/_/g, '-');
+            const mentionsField = normalizedError.includes(fieldName) || normalizedError.includes(hyphenName);
+            if (sentBody?.[fieldName] !== undefined && mentionsField) {
                 if (fieldName === 'max_completion_tokens') {
                     return { removeField: fieldName, replacementField: 'max_tokens' };
                 }
@@ -727,7 +729,7 @@
                 const delta = choice.delta || {};
                 const message = choice.message || {};
                 const contentDelta = delta.content ?? message.content ?? '';
-                const reasoningDelta = delta.reasoning ?? delta.reasoning_content ?? message.reasoning ?? message.reasoning_content ?? '';
+                const reasoningDelta = delta.reasoning ?? delta.reasoning_content ?? delta.thought ?? message.reasoning ?? message.reasoning_content ?? message.thought ?? '';
 
                 if (contentDelta) {
                     content += contentDelta;
