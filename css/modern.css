@@ -1819,12 +1819,24 @@ textarea.ai-input { resize: vertical; min-height: 60px; line-height: 1.5; }
     white-space: nowrap;
 }
 
+#ai-btn-image,
+#ai-btn-local-files {
+    padding: 0 !important;
+    min-width: 48px !important;
+    height: 48px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: linear-gradient(135deg, #64748b 0%, #475569 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(100, 116, 139, 0.35) !important;
+}
+
 #ai-btn-image svg,
 #ai-btn-local-files svg {
-    width: 20px !important;
-    height: 20px !important;
+    width: 22px !important;
+    height: 22px !important;
     stroke: currentColor;
-    fill: none;
     stroke-width: 2;
 }
 
