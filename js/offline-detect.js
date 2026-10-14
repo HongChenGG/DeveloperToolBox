@@ -9,9 +9,17 @@
     ];
 
     function updateOnlineState(online) {
+        const hideMusic = localStorage.getItem('hide_music_player') === '1';
+
         networkOnlySelectors.forEach(selector => {
             document.querySelectorAll(selector).forEach(element => {
-                element.hidden = !online;
+                const shouldHide = !online || (selector === '#btn-toggle-player' && hideMusic);
+                element.hidden = shouldHide;
+                if (shouldHide) {
+                    element.style.setProperty('display', 'none', 'important');
+                } else {
+                    element.style.removeProperty('display');
+                }
             });
         });
 

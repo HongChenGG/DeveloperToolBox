@@ -2565,6 +2565,17 @@
                         <div class="theme-desc">深邃极光，专注夜深</div>
                     </div>
                 </div>
+
+                <div style="margin-top: 25px; padding-top: 15px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px; color: var(--text-primary);">🎵 在线音乐播放器</div>
+                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">依赖外网 API。内网/离线环境可在此一键关闭</div>
+                    </div>
+                    <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="setting-toggle-music" style="width: 18px; height: 18px; cursor: pointer;">
+                        <span style="font-size: 13px; color: var(--text-primary);">显示悬浮球</span>
+                    </label>
+                </div>
             </div>
         </div>
     </div>
@@ -2613,8 +2624,8 @@
         <audio id="audio-player" style="display: none;"></audio>
     </div>
     
-    <!-- 音乐播放器开关按钮 -->
-    <button id="btn-toggle-player" style="position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 24px; z-index: 1400; transition: all 0.3s;">🎵</button>
+    <!-- 音乐播放器开关按钮 (内网离线环境无需音乐可直接注释此行，或右键悬浮球隐藏) -->
+    <button id="btn-toggle-player" title="音乐播放器 (右键可永久隐藏)" style="position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 50%; border: none; color: white; cursor: pointer; font-size: 24px; z-index: 1400; transition: all 0.3s;">🎵</button>
 
     <!-- 备忘录到期提醒弹窗 -->
     <div id="rem-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:2200;align-items:center;justify-content:center">

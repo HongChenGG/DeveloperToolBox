@@ -255,6 +255,34 @@
         if (btnThemeSettings) {
             btnThemeSettings.addEventListener('click', () => {
                 document.getElementById('theme-modal').style.display = 'flex';
+                const musicCheckbox = document.getElementById('setting-toggle-music');
+                if (musicCheckbox) musicCheckbox.checked = localStorage.getItem('hide_music_player') !== '1';
+            });
+        }
+
+        // 绑定音乐播放器开关设置
+        const musicCheckbox = document.getElementById('setting-toggle-music');
+        if (musicCheckbox) {
+            musicCheckbox.checked = localStorage.getItem('hide_music_player') !== '1';
+            musicCheckbox.addEventListener('change', () => {
+                const toggleBtn = document.getElementById('btn-toggle-player');
+                const musicPlayer = document.getElementById('music-player');
+                if (musicCheckbox.checked) {
+                    localStorage.removeItem('hide_music_player');
+                    if (toggleBtn) {
+                        toggleBtn.hidden = false;
+                        toggleBtn.style.removeProperty('display');
+                    }
+                    if (typeof showToast === 'function') showToast('已开启音乐播放器', 'success');
+                } else {
+                    localStorage.setItem('hide_music_player', '1');
+                    if (toggleBtn) {
+                        toggleBtn.hidden = true;
+                        toggleBtn.style.setProperty('display', 'none', 'important');
+                    }
+                    if (musicPlayer) musicPlayer.style.display = 'none';
+                    if (typeof showToast === 'function') showToast('已隐藏音乐播放器', 'info');
+                }
             });
         }
 

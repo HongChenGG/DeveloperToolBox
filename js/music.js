@@ -13,12 +13,30 @@
 
     function init() {
         audio = document.getElementById('audio-player');
+        if (localStorage.getItem('hide_music_player') === '1') {
+            const toggleBtn = document.getElementById('btn-toggle-player');
+            if (toggleBtn) {
+                toggleBtn.hidden = true;
+                toggleBtn.style.setProperty('display', 'none', 'important');
+            }
+        }
         bindEvents();
     }
 
     function bindEvents() {
         // 开关播放器
-        document.getElementById('btn-toggle-player')?.addEventListener('click', togglePlayer);
+        const toggleBtn = document.getElementById('btn-toggle-player');
+        toggleBtn?.addEventListener('click', togglePlayer);
+        // 右键单击悬浮球直接隐藏（内网/离线免打扰）
+        toggleBtn?.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            toggleBtn.hidden = true;
+            toggleBtn.style.setProperty('display', 'none', 'important');
+            localStorage.setItem('hide_music_player', '1');
+            if (typeof showToast === 'function') {
+                showToast('已隐藏音乐播放器（可在设置中重新开启）', 'info');
+            }
+        });
         document.getElementById('btn-close-player')?.addEventListener('click', closePlayer);
 
         // 播放控制
@@ -85,7 +103,18 @@
             }
         } catch (error) {
             console.error('加载播放列表失败:', error);
-            if (error.name !== 'AbortError') showToast('加载歌曲失败，请检查网络', 'error');
+            // 内网或无外网连接时，自动隐藏该功能以免产生困扰
+            const toggleBtn = document.getElementById('btn-toggle-player');
+            const player = document.getElementById('music-player');
+            if (toggleBtn) {
+                toggleBtn.hidden = true;
+                toggleBtn.style.setProperty('display', 'none', 'important');
+            }
+            if (player) player.style.display = 'none';
+            localStorage.setItem('hide_music_player', '1');
+            if (error.name !== 'AbortError' && typeof showToast === 'function') {
+                showToast('内网环境无法访问外网音乐，已自动隐藏播放器', 'info');
+            }
             return false;
         }
     }
@@ -242,8 +271,10 @@
         const player = document.getElementById('music-player');
         const toggleBtn = document.getElementById('btn-toggle-player');
         
-        player.style.display = 'none';
-        toggleBtn.style.display = 'block';
+        if (player) player.style.display = 'none';
+        if (toggleBtn && localStorage.getItem('hide_music_player') !== '1') {
+            toggleBtn.style.display = 'block';
+        }
     }
 
     // 加载专辑封面
